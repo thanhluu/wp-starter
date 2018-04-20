@@ -1,0 +1,19 @@
+{
+  "name": "wp-starter",
+  "version": "1.0.0",
+  "homepage": "http://www.example.com",
+  "authors": [
+    "Author <contact@example.com>"
+  ],
+  "license": "GPL-3.0+",
+  "private": true,
+  "ignore": [
+    "node_modules",
+    "dev/vendor"
+  ],
+  "dependencies": {
+    "fontawesome": "^4.5.0",
+    "bootstrap": "^3.3.6",
+    "modernizr": "^2.8.3"
+  }
+}
