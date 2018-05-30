@@ -7,11 +7,21 @@ class _FW_Customizer_Setting_Option extends WP_Customize_Setting {
 	 */
 	protected $fw_option = array();
 
+	/**
+	 * @var string
+	 * This is sent in args and set in parent construct
+	 */
+	protected $fw_option_id;
+
 	public function get_fw_option() {
 		return $this->fw_option;
 	}
 
 	public function sanitize($value) {
+		if ( is_array( $value ) ) {
+			return null;
+		}
+		   
 		$value = json_decode($value, true);
 
 		if (is_null($value) || !is_array($value)) {
@@ -34,5 +44,31 @@ class _FW_Customizer_Setting_Option extends WP_Customize_Setting {
 		);
 
 		return $value;
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	public function value() {
+		return fw_db_option_storage_load(
+			$this->fw_option_id,
+			$this->fw_option,
+			parent::value(),
+			array('customizer' => true)
+		);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function update( $value ) {
+		return parent::update(
+			fw_db_option_storage_save(
+				$this->fw_option_id,
+				$this->fw_option,
+				$value,
+				array('customizer' => true)
+			)
+		);
 	}
 }

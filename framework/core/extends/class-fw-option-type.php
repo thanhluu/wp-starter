@@ -6,6 +6,11 @@
 abstract class FW_Option_Type
 {
 	/**
+	 * @var FW_Access_Key
+	 */
+	private static $access_key;
+
+	/**
 	 * Option's unique type, used in option array in 'type' key
 	 * @return string
 	 */
@@ -37,8 +42,9 @@ abstract class FW_Option_Type
 	abstract protected function _render($id, $option, $data);
 
 	/**
-	 * Extract correct value for $option['value'] from input array
+	 * Extract correct value that will be stored in db or $option['value'] from raw form input value
 	 * If input value is empty, will be returned $option['value']
+	 * This method should be named get_db_value($form_input_value, $option)
 	 * @param array $option Option array merged with _get_defaults()
 	 * @param array|string|null $input_value
 	 * @return string|array|int|bool Correct value
@@ -63,6 +69,27 @@ abstract class FW_Option_Type
 	abstract protected function _get_defaults();
 
 	/**
+	 * Put data for to be accessed in JavaScript for each option type instance
+	 */
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return array(
+			'option' => $option
+		);
+	}
+
+	/**
+	 * An option type can decide which design to use by default when rendering
+	 * itself.
+	 *
+	 * @return
+	 *   null - will use whatever is passed based on the context
+	 *   string - will use that particular design
+	 */
+	public function get_forced_render_design() {
+		return null;
+	}
+
+	/**
 	 * Prevent execute enqueue multiple times
 	 * @var bool
 	 */
@@ -74,7 +101,7 @@ abstract class FW_Option_Type
 	 */
 	final public static function get_default_id_prefix()
 	{
-		return 'fw-option-';
+		return fw()->backend->get_options_id_attr_prefix();
 	}
 
 	/**
@@ -84,12 +111,7 @@ abstract class FW_Option_Type
 	 */
 	final public static function get_default_name_prefix()
 	{
-		return 'fw_options';
-	}
-
-	final public function __construct()
-	{
-		// does nothing at the moment, but maybe in the future will do something
+		return fw()->backend->get_options_name_attr_prefix();
 	}
 
 	/**
@@ -110,6 +132,10 @@ abstract class FW_Option_Type
 		}
 	}
 
+	public function __construct() {
+
+	}
+
 	/**
 	 * Fixes and prepare defaults
 	 *
@@ -117,8 +143,10 @@ abstract class FW_Option_Type
 	 * @param array  $option
 	 * @param array  $data
 	 * @return array
+	 *
+	 * @since 2.5.10
 	 */
-	private function prepare(&$id, &$option, &$data)
+	public function prepare(&$id, &$option, &$data)
 	{
 		$data = array_merge(
 			array(
@@ -181,7 +209,23 @@ abstract class FW_Option_Type
 
 		$this->enqueue_static($id, $option, $data);
 
-		return $this->_render($id, $option, $data);
+		$html_attributes = array(
+			'class' => 'fw-backend-option-descriptor',
+			'data-fw-option-id' => $id,
+			'data-fw-option-type' => $option['type']
+		);
+
+		$data_for_js = $this->_get_data_for_js($id, $option, $data);
+
+		if ($data_for_js) {
+			$html_attributes['data-fw-for-js'] = json_encode($data_for_js);
+		}
+
+		return fw_html_tag(
+			'div',
+			$html_attributes,
+			$this->_render( $id, $this->load_callbacks( $option ), $data )
+		);
 	}
 
 	/**
@@ -195,6 +239,10 @@ abstract class FW_Option_Type
 	 */
 	final public function enqueue_static($id = '', $option = array(), $data = array())
 	{
+		if ($this->static_enqueued) {
+			return false;
+		}
+
 		if (
 			!doing_action('admin_enqueue_scripts')
 			&&
@@ -221,17 +269,13 @@ abstract class FW_Option_Type
 				wp_enqueue_script(
 					'fw-option-types',
 					fw_get_framework_directory_uri('/static/js/option-types.js'),
-					array('fw-events', 'qtip'),
+					array('fw-events', 'qtip', 'fw-reactive-options'),
 					fw()->manifest->get_version(),
 					true
 				);
 
 				$option_types_static_enqueued = true;
 			}
-		}
-
-		if ($this->static_enqueued) {
-			return false;
 		}
 
 		$this->prepare($id, $option, $data);
@@ -244,8 +288,9 @@ abstract class FW_Option_Type
 	}
 
 	/**
-	 * Extract correct value for $option['value'] from input array
+	 * Extract correct value that will be stored in db or $option['value'] from raw form input value
 	 * If input value is empty, will be returned $option['value']
+	 * This method should be named get_db_value($form_input_value, $option)
 	 * @param  array $option
 	 * @param  mixed|null $input_value Option's value from $_POST or elsewhere. If is null, it means it does not exists
 	 * @return array|string
@@ -260,7 +305,7 @@ abstract class FW_Option_Type
 			)
 		);
 
-		return $this->_get_value_from_input($option, $input_value);
+		return $this->_get_value_from_input( $this->load_callbacks( $option ), $input_value);
 	}
 
 	/**
@@ -269,15 +314,16 @@ abstract class FW_Option_Type
 	 * This makes possible an option array to have required only one parameter: array('type' => '...')
 	 * Other parameters are merged with array returned from this method
 	 *
+	 * @param string Multikey. Since 2.6.9
 	 * @return array
 	 */
-	final public function get_defaults()
+	final public function get_defaults($key = null)
 	{
 		$option = $this->_get_defaults();
 
 		$option['type'] = $this->get_type();
 
-		if (!isset($option['value'])) {
+		if (!array_key_exists('value', $option)) {
 			FW_Flash_Messages::add(
 				'fw-option-type-no-default-value',
 				sprintf(__('Option type %s has no default value', 'fw'), $this->get_type()),
@@ -287,7 +333,7 @@ abstract class FW_Option_Type
 			$option['value'] = array();
 		}
 
-		return $option;
+		return is_string($key) ? fw_akg($key, $option) : $option;
 	}
 
 	/**
@@ -305,16 +351,115 @@ abstract class FW_Option_Type
 	}
 
 	/**
+	 * a general purpose 'label' => false | true from options.php
+	 * @return bool | string
+	 *
+	 * @since 2.7.1
+	 */
+	public function _default_label($id, $option) {
+		return fw_id_to_title($id);
+	}
+
+	/**
 	 * Use this method to register a new option type
+	 *
 	 * @param string|FW_Option_Type $option_type_class
 	 */
-	final public static function register($option_type_class) {
-		static $registration_access_key = null;
+	final public static function register( $option_type_class, $type = null ) {
+		fw()->backend->_register_option_type( self::get_access_key(), $option_type_class, $type );
+	}
 
-		if ($registration_access_key === null) {
-			$registration_access_key = new FW_Access_Key('fw_option_type');
+	/**
+	 * If the option is composed of more options (added by user) which values are stored in database
+	 * the option must call fw_db_option_storage_load() for each sub-option
+	 * because some of them may have configured the save to be done in separate place (post meta, wp option, etc.)
+	 * @param string $id
+	 * @param array $option
+	 * @param mixed $value
+	 * @param array $params
+	 * @return mixed
+	 * @since 2.5.0
+	 */
+	final public function storage_load($id, array $option, $value, array $params = array()) {
+		if ( // do not check !empty($option['fw-storage']) because this param can be set in option defaults
+			$this->get_type() === $option['type']
+			&&
+			($option = array_merge($this->get_defaults(), $option))
+		) {
+			if (is_null($value)) {
+				$value = fw()->backend->option_type($option['type'])->get_value_from_input($option, $value);
+			}
+
+			return $this->_storage_load($id, $option, $value, $params);
+		} else {
+			return $value;
+		}
+	}
+
+	/**
+	 * @see storage_load()
+	 * @param string $id
+	 * @param array $option
+	 * @param mixed $value
+	 * @param array $params
+	 * @return mixed
+	 * @since 2.5.0
+	 * @internal
+	 */
+	protected function _storage_load($id, array $option, $value, array $params) {
+		return fw_db_option_storage_load($id, $option, $value, $params);
+	}
+
+	/**
+	 * If the option is composed of more options (added by user) which values are stored in database
+	 * the option must call fw_db_option_storage_save() for each sub-option
+	 * because some of them may have configured the save to be done in separate place (post meta, wp option, etc.)
+	 * @param string $id
+	 * @param array $option
+	 * @param mixed $value
+	 * @param array $params
+	 * @return mixed
+	 * @since 2.5.0
+	 */
+	final public function storage_save($id, array $option, $value, array $params = array()) {
+		if ( // do not check !empty($option['fw-storage']) because this param can be set in option defaults
+			$this->get_type() === $option['type']
+			&&
+			($option = array_merge($this->get_defaults(), $option))
+		) {
+			return $this->_storage_save($id, $option, $value, $params);
+		} else {
+			return $value;
+		}
+	}
+
+	/**
+	 * @see storage_save()
+	 * @param string $id
+	 * @param array $option
+	 * @param mixed $value
+	 * @param array $params
+	 * @return mixed
+	 * @since 2.5.0
+	 * @internal
+	 */
+	protected function _storage_save($id, array $option, $value, array $params) {
+		return fw_db_option_storage_save($id, $option, $value, $params);
+	}
+
+	private static function get_access_key() {
+		if ( self::$access_key === null ) {
+			self::$access_key = new FW_Access_Key( 'fw_option_type' );
 		}
 
-		fw()->backend->_register_option_type($registration_access_key, $option_type_class);
+		return self::$access_key;
+	}
+
+	protected function load_callbacks( $data ) {
+		if ( ! is_array( $data ) ) {
+			return $data;
+		}
+
+		return array_map( 'fw_call', $data );
 	}
 }

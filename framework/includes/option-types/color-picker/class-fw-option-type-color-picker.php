@@ -48,7 +48,7 @@ class FW_Option_Type_Color_Picker extends FW_Option_Type
 	 */
 	protected function _render($id, $option, $data)
 	{
-		$option['attr']['value']  = (string)$data['value'];
+		$option['attr']['value']  = strtolower($data['value']);
 		$option['attr']['class'] .= ' code';
 		$option['attr']['size']   = '7';
 		$option['attr']['maxlength'] = '7';
@@ -71,11 +71,20 @@ class FW_Option_Type_Color_Picker extends FW_Option_Type
 	 */
 	protected function _get_value_from_input($option, $input_value)
 	{
-		if (!isset($input_value) || !preg_match('/^#[a-f0-9]{3}([a-f0-9]{3})?$/i', $input_value)) {
-			$input_value = $option['value'];
+		if (
+			is_null($input_value)
+			||
+			(
+				// do not use `!is_null()` allow empty values https://github.com/ThemeFuse/Unyson/issues/2025
+				!empty($input_value)
+				&&
+				!preg_match('/^#([a-f0-9]{3}){1,2}$/i', $input_value)
+			)
+		) {
+			return (string)$option['value'];
+		} else {
+			return (string)$input_value;
 		}
-
-		return (string)$input_value;
 	}
 
 	/**
@@ -93,8 +102,7 @@ class FW_Option_Type_Color_Picker extends FW_Option_Type
 	{
 		return array(
 			'value' => '',
-			'palettes'=> true
+			'palettes'=> true,
 		);
 	}
 }
-FW_Option_Type::register('FW_Option_Type_Color_Picker');

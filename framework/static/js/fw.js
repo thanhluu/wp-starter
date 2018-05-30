@@ -17,12 +17,14 @@ fw.FW_URI = _fw_localized.FW_URI;
 
 fw.SITE_URI = _fw_localized.SITE_URI;
 
+fw.LOADER_URI = _fw_localized.LOADER_URI;
+
 /**
  * Useful images
  */
 fw.img = {
 	loadingSpinner: fw.SITE_URI +'/wp-admin/images/spinner.gif',
-	logoSvg: fw.FW_URI +'/static/img/logo.svg'
+	logoSvg: fw.LOADER_URI
 };
 
 /**
@@ -460,6 +462,25 @@ fw.capitalizeFirstLetter = function(str) {
 };
 
 /**
+ * Wait until an array of dynamically computed jQuery.Deferred() objects
+ * get resolved.
+ */
+fw.whenAll = function(deferreds) {
+	var deferred = new jQuery.Deferred();
+
+	jQuery.when.apply(jQuery, deferreds).then(
+		function() {
+			deferred.resolve(Array.prototype.slice.call(arguments));
+		},
+		function() {
+			deferred.fail(Array.prototype.slice.call(arguments));
+		}
+	);
+
+	return deferred;
+}
+
+/**
  * Set nested property value
  *
  * Usage:
@@ -603,6 +624,12 @@ fw.getQueryString = function(name) {
 	 * Usage:
 	 * var modal = new fw.Modal();
 	 *
+	 * You can add a custom CSS class to your fw.Modal this way:
+	 *
+	 * var modal = new fw.Modal ({
+	 *   modalCustomClass: 'your-custom-css-class'
+	 * });
+	 *
 	 * modal.on('open|render|closing|close', function(){});
 	 */
 	fw.Modal = Backbone.Model.extend({
@@ -615,6 +642,9 @@ fw.getQueryString = function(name) {
 			 * @private
 			 */
 			html: '',
+			modalCustomClass: '',
+			emptyHtmlOnClose: true,
+			disableLazyTabs: false,
 			size: 'small' // small, medium, large
 		},
 		ContentView: Backbone.View.extend({
@@ -640,8 +670,19 @@ fw.getQueryString = function(name) {
 					this.afterHtmlReplaceFixes();
 				}
 			},
+			renderSizeClass: function () {
+				var $modalWrapper = this.model.frame.modal.$el;
+				var allSizes = ['large', 'medium', 'small'];
+
+				$modalWrapper.removeClass(
+					_.map(allSizes, formSizeClass).join(' ')
+				).addClass(formSizeClass(this.model.get('size')));
+
+				function formSizeClass (size) { return 'fw-modal-' + size; }
+			},
 			initialize: function() {
 				this.listenTo(this.model, 'change:html', this.render);
+				this.listenTo(this.model, 'change:size', this.renderSizeClass);
 			},
 			/**
 			 * Call this after html replace
@@ -660,6 +701,16 @@ fw.getQueryString = function(name) {
 				}
 
 				this.$el.append('<input type="submit" class="fw-hidden hidden-submit" />');
+
+				/**
+				 * The user may want to completely disable lazy tabs for the
+				 * current modal. It is VERY convenient sometimes.
+				 */
+				if (this.model.get('disableLazyTabs')) {
+					fwEvents.trigger('fw:options:init:tabs', {
+						$elements: this.model.frame.$el
+					});
+				}
 			}
 		}),
 		/**
@@ -671,8 +722,8 @@ fw.getQueryString = function(name) {
 			var modal = this;
 
 			var ControllerMainState = wp.media.controller.State.extend({
-				id: 'main',
 				defaults: {
+					id: 'main',
 					content: 'main',
 					menu: 'default',
 					title: this.get('title'),
@@ -684,78 +735,41 @@ fw.getQueryString = function(name) {
 					});
 				},
 				activate: function () {
-					this.listenTo(this.frame, 'title:create:default', function () {
-						this.frame.title.mode(this.id);
-					});
-
-					this.listenTo(this.frame, 'title:create:' + this.id, function (title) {
-						title.view = new wp.media.View({
-							controller: this,
-							tagName: 'h1'
-						});
-					});
-
-					this.listenTo(this.frame, 'title:render:' + this.id, function (view) {
-						view.$el.html(this.get('title') + this.get('headerElements') || '');
-					});
+					this.frame.once('ready', _.bind(function(){
+						this.frame.views.get('.media-frame-title')[0].$el
+							.text(this.get('title'))
+							.append(this.get('headerElements') || '');
+					}, this));
 				}
 			});
 
 			this.frame = new wp.media.view.MediaFrame({
 				state: 'main',
-				states: [ new ControllerMainState ]
+				states: [ new ControllerMainState ],
+				uploader: false
 			});
 
 			var modal = this;
 
 			this.frame.once('ready', function(){
-				var $modalWrapper = modal.frame.modal.$el,
-					$modal        = $modalWrapper.find('.media-modal'),
-					$backdrop     = $modalWrapper.find('.media-modal-backdrop'),
-					size          = modal.get('size'),
-					stackSize     = modalsStack.getSize(),
-					$close        = $modalWrapper.find('.media-modal-close');
+				var $modalWrapper    = modal.frame.modal.$el,
+					$backdrop        = $modalWrapper.find('.media-modal-backdrop'),
+					size             = modal.get('size'),
+					modalCustomClass = modal.get('modalCustomClass'),
+					$close           = $modalWrapper.find('.media-modal-close');
 
 				modal.frame.$el.addClass('hide-toolbar');
 
 				$modalWrapper.addClass('fw-modal');
 
+				if (modalCustomClass) {
+					$modalWrapper.addClass(modalCustomClass);
+				}
+
 				if (_.indexOf(['large', 'medium', 'small'], size) !== -1) {
 					$modalWrapper.addClass('fw-modal-' + size);
 				} else {
 					$modalWrapper.addClass('fw-modal-' + modal.defaults.size);
-				}
-
-				if (stackSize) {
-					$modal.css({
-						border: (stackSize * 30) +'px solid transparent'
-					});
-				}
-
-				/**
-				 * Adjust the z-index for the new frame's backdrop and modal
-				 */
-				{
-					$backdrop.css('z-index',
-						/**
-						 * Use modal z-index because backdrop z-index in some cases can be too smaller
-						 * and when there are 2+ modals open, first modal will cover the second backdrop
-						 *
-						 * For e.g.
-						 *
-						 * - second modal | z-index: 560003
-						 * - second backdrop | z-index: 559902
-						 *
-						 * - first modal | z-index: 560002 (This will cover the above backdrop)
-						 * - first backdrop | z-index: 559901
-						 */
-						parseInt($modal.css('z-index'))
-						+ stackSize * 2 + 1
-					);
-					$modal.css('z-index',
-						parseInt($modal.css('z-index'))
-						+ stackSize * 2 + 2
-					);
 				}
 
 				/**
@@ -817,9 +831,72 @@ fw.getQueryString = function(name) {
 			});
 
 			this.frame.on('open', function() {
-				var $modalWrapper = modal.frame.modal.$el;
+				var $modalWrapper = modal.frame.modal.$el,
+					$modal = $modalWrapper.find('.media-modal'),
+					$backdrop = $modalWrapper.find('.media-modal-backdrop');
+
+				// Adjust modal level related properties
+				{
+					var stackSize = modalsStack.getSize();
+
+					$modalWrapper
+						.removeClass( // 'fw-modal-level-0 fw-modal-level-1 ...'
+							Array.apply(null, {length: 10})
+								.map(Number.call, Number)
+								.map(function(i){ return 'fw-modal-level-'+ i; })
+								.join(' ')
+						)
+						.addClass('fw-modal-level-'+ stackSize);
+
+					if (stackSize) {
+						$modal.css({
+							border: (stackSize * 30) +'px solid transparent'
+						});
+					}
+
+					// reset to initial css value
+					// fixes https://github.com/ThemeFuse/Unyson/issues/2167
+					$modal.css('z-index', '');
+
+					/**
+					 * Adjust the z-index for the new frame's backdrop and modal
+					 */
+					$backdrop.css('z-index',
+						/**
+						 * Use modal z-index because backdrop z-index in some cases can be too smaller
+						 * and when there are 2+ modals open, first modal will cover the second backdrop
+						 *
+						 * For e.g.
+						 *
+						 * - second modal | z-index: 560003
+						 * - second backdrop | z-index: 559902
+						 *
+						 * - first modal | z-index: 560002 (This will cover the above backdrop)
+						 * - first backdrop | z-index: 559901
+						 */
+						parseInt($modal.css('z-index'))
+						+ stackSize * 2 + 1
+					);
+
+					$modal.css('z-index',
+						parseInt($modal.css('z-index'))
+						+ stackSize * 2 + 2
+					);
+				}
 
 				$modalWrapper.addClass('fw-modal-open');
+
+				/**
+				 * We probably don't need this class anymore due to the
+				 * fact that we hacked CSS specificity away.
+				 *
+				 * I'll be keeping it here for integrity with fw.soleModal.
+				 */
+				$modalWrapper.addClass('fw-modal-opening');
+
+				setTimeout(function () {
+					$modalWrapper.removeClass('fw-modal-opening');
+				}, 300);
 
 				modalsStack.push($modalWrapper.find('.media-modal'));
 
@@ -847,7 +924,9 @@ fw.getQueryString = function(name) {
 				 * clear html
 				 * to prevent same ids in html when another modal with same options will be opened
 				 */
-				modal.set('html', '');
+				if (modal.get('emptyHtmlOnClose')) {
+					modal.set('html', '');
+				}
 
 				modal.frame.modal.$el.removeClass('fw-modal-open');
 
@@ -882,6 +961,15 @@ fw.getQueryString = function(name) {
 		},
 		open: function() {
 			this.frame.open();
+
+			var modal = this;
+
+			this.once('closing', function () {
+				fwEvents.trigger(
+					'fw:options:teardown',
+					{ $elements: modal.content.$el, modal: modal }
+				);
+			});
 
 			return this;
 		},
@@ -919,9 +1007,51 @@ fw.getQueryString = function(name) {
 	});
 })();
 
+/**
+ * @param {String} [data] An object with two keys:
+ *                        options: Your array with option types
+ *                        data: a string that will contain correctly serialized data
+ *                              Ex.: "parameter1=val1&par2=value"
+ *
+ * @returns {Promise} jQuery promise you can use in order to get your values
+ *
+ * modal.getValuesFromServer({options: your_options})
+ *     .done(function (response, status, xhr) {
+ *         console.log(response.data.values); // your values ready to be used
+ *     })
+ *     .fail(function (xhr, status, error) {
+ *         // handle errors
+ *         console.error(status + ': ' + error);
+ *     });
+ */
+fw.getValuesFromServer = function (data) {
+	var opts = _.extend({
+		options: [],
+		actualValues: ""
+	}, data);
+
+	if (opts.options.length === 0) { return {}; }
+
+	var dataToSend = [
+		'action=fw_backend_options_get_values',
+		'options='+ encodeURIComponent(JSON.stringify(opts.options)),
+		'name_prefix=fw_edit_options_modal'
+	];
+
+	if (opts.actualValues) {
+		dataToSend.push(opts.actualValues);
+	}
+
+	return jQuery.ajax({
+		url: ajaxurl,
+		type: 'POST',
+		data: dataToSend.join('&'),
+		dataType: 'json'
+	});
+};
+
 (function(){
-	var fwLoadingId = 'fw-options-modal',
-		htmlCache = {};
+	var fwLoadingId = 'fw-options-modal';
 
 	/**
 	 * Modal to edit backend options
@@ -942,7 +1072,9 @@ fw.getQueryString = function(name) {
 	 *  values: {
 	 *      'test1': 'Default1',
 	 *      'test2': 'Default2'
-	 *  }
+	 *  },
+	 *  modalCustomClass: 'some-custom-class' // if you want to add some css class
+	 *                                        // to your modal
 	 * });
 	 *
 	 * // listen for values change
@@ -963,21 +1095,20 @@ fw.getQueryString = function(name) {
 			onSubmit: function(e) {
 				e.preventDefault();
 
-				var loadingId = fwLoadingId +':submit';
+				var loadingId = fwLoadingId +':submit',
+					view = this;
 
 				fw.loading.show(loadingId);
 
-				jQuery.ajax({
-					url: ajaxurl,
-					type: 'POST',
-					data: [
-						'action=fw_backend_options_get_values',
-						'options='+ encodeURIComponent(JSON.stringify(this.model.get('options'))),
-						'name_prefix=fw_edit_options_modal',
-						this.$el.serialize()
-					].join('&'),
-					dataType: 'json',
-					success: _.bind(function (response, status, xhr) {
+				/**
+				 * Init all Lazy Tabs to render all form inputs.
+				 * Lazy Tabs script is listening the form 'submit' event
+				 * but it's executed after this event.
+				 */
+				fwEvents.trigger('fw:options:init:tabs', {$elements: view.$el});
+
+				view.model.getValuesFromServer(view.$el.serialize())
+					.done(function (response, status, xhr) {
 						fw.loading.hide(loadingId);
 
 						if (!response.success) {
@@ -990,12 +1121,21 @@ fw.getQueryString = function(name) {
 							return;
 						}
 
-						this.model.set('values', response.data.values);
+						/**
+						 * Make sure the second set() will trigger the 'change' event
+						 * Fixes https://github.com/ThemeFuse/Unyson/issues/1998#issuecomment-248671721
+						 */
+						view.model.set('values', {}, {silent: true});
+						view.model.set('values', response.data.values);
 
-						// simulate click on close button to fire animations
-						this.model.frame.modal.$el.find('.media-modal-close').trigger('click');
-					}, this),
-					error: function (xhr, status, error) {
+						if (! view.model.frame.$el.hasClass('fw-options-modal-no-close')) {
+							// simulate click on close button to fire animations
+							view.model.frame.modal.$el.find('.media-modal-close').trigger('click');
+						}
+
+						view.model.frame.$el.removeClass('fw-options-modal-no-close');
+					})
+					.fail(function (xhr, status, error) {
 						fw.loading.hide(loadingId);
 
 						/**
@@ -1004,8 +1144,7 @@ fw.getQueryString = function(name) {
 						 * do not delete all his work
 						 */
 						alert(status +': '+ error.message);
-					}
-				});
+					});
 			},
 			resetForm: function() {
 				var loadingId = fwLoadingId +':reset';
@@ -1049,12 +1188,16 @@ fw.getQueryString = function(name) {
 						 * user completed the form with data and wants to submit data
 						 * do not delete all his work
 						 */
-						alert(status +': '+ error.message);
+						alert(status +': '+ String(error));
 					}
 				});
 			}
 		}),
 		defaults: _.extend(
+			/**
+			 * Don't mutate original one!!!
+			 */
+			{},
 			fw.Modal.prototype.defaults,
 			{
 				/**
@@ -1075,9 +1218,25 @@ fw.getQueryString = function(name) {
 				 * Values of the options {'option-id': 'option value'}
 				 * also used in fw()->backend->render_options()
 				 */
-				values: {}
+				values: {},
+
+				silentReceiveOfDefaultValues: true
 			}
 		),
+		initialize: function () {
+			fw.Modal.prototype.initialize.apply(this, arguments);
+
+			fwEvents.trigger('fw:options-modal:after-initialize', {modal: this});
+
+			// Forward events to fwEvents
+			{
+				/** @since 2.6.14 */
+				this.on('open',  function () { fwEvents.trigger('fw:options-modal:open',  {modal: this}); });
+
+				/** @since 2.6.14 */
+				this.on('close', function () { fwEvents.trigger('fw:options-modal:close', {modal: this}); });
+			}
+		},
 		initializeFrame: function(settings) {
 			fw.Modal.prototype.initializeFrame.call(this, settings);
 
@@ -1087,26 +1246,48 @@ fw.getQueryString = function(name) {
 				buttons = [
 					{
 						style: 'primary',
-						text: _fw_localized.l10n.save,
+						text: settings.saveText || _fw_localized.l10n.modal_save_btn,
 						priority: 40,
 						click: function () {
-							/**
-							 * Simulate form submit
-							 * Important: Empty input[required] must not start form submit
-							 *     and must show default browser warning popup "This field is required"
-							 */
-							modal.content.$el.find('input[type="submit"].hidden-submit').trigger('click');
-						}
-					},
-					{
-						style: '',
-						text: _fw_localized.l10n.reset,
-						priority: -1,
-						click: function () {
-							modal.content.resetForm();
+							if (settings.shouldSaveWithoutClose) {
+								modal.frame.$el.addClass('fw-options-modal-no-close');
+							}
+
+							triggerSubmit();
 						}
 					}
 				];
+
+			if (!(
+				typeof settings.disableResetButton === 'undefined'
+					? _fw_localized.options_modal.default_reset_bnt_disabled
+					: settings.disableResetButton
+			)) {
+				buttons = buttons.concat([{
+					style: '',
+					text: _fw_localized.l10n.reset,
+					priority: -1,
+					click: function () {
+						modal.content.resetForm();
+					}
+				}]);
+			}
+
+			/**
+			 * Sometimes we want an apply button in order to save changes
+			 * that will not trigger a modal close.
+			 */
+			if (settings.saveWithoutCloseButton) {
+				buttons = buttons.concat([{
+					style: '',
+					text: _fw_localized.l10n.apply,
+					priority: 45,
+					click: function () {
+						modal.frame.$el.addClass('fw-options-modal-no-close');
+						triggerSubmit();
+					}
+				}]);
+			}
 
 			if (settings.buttons) {
 				buttons = buttons.concat(settings.buttons);
@@ -1125,6 +1306,15 @@ fw.getQueryString = function(name) {
 				this.frame.$el.removeClass('hide-toolbar');
 				this.frame.modal.$el.addClass('fw-options-modal');
 			}, this));
+
+			function triggerSubmit () {
+				/**
+				 * Simulate form submit
+				 * Important: Empty input[required] must not start form submit
+				 *     and must show default browser warning popup "This field is required"
+				 */
+				modal.content.$el.find('input[type="submit"].hidden-submit').trigger('click');
+			}
 		},
 		/**
 		 * @param {Object} [values] Offer custom values for display. The user can reject them by closing the modal
@@ -1136,57 +1326,65 @@ fw.getQueryString = function(name) {
 
 			return this;
 		},
-		getHtmlCacheId: function(values) {
-			return fw.md5(
-				JSON.stringify(this.get('options')) +
-				'~' +
-				JSON.stringify(typeof values == 'undefined' ? this.get('values') : values)
-			);
+		/**
+		 * @param {String} [actualValues] A string containing correctly serialized
+		 *                                data that will be sent to the server.
+		 *                                Ex.: "parameter1=val1&par2=value"
+		 *
+		 * @returns {Promise} jQuery promise you can use in order to get your values
+		 *
+		 *
+		 * modal.getValuesFromServer()
+		 *     .done(function (response, status, xhr) {
+		 *         console.log(response.data.values); // your values ready to be used
+		 *     })
+		 *     .fail(function (xhr, status, error) {
+		 *         // handle errors
+		 *         console.error(status + ': ' + error);
+		 *     });
+		 */
+		getValuesFromServer: function (actualValues) {
+			return fw.getValuesFromServer({
+				options: this.get('options'),
+				actualValues: actualValues
+			});
 		},
+		/**
+		 * @returns {Promise} jQuery promise
+		 *
+		 * Will work out just like getValuesFromServer() did, but it will
+		 * also include values that are currently in the form.
+		 */
+		getActualValues: function () {
+			return this.getValuesFromServer(this.content.$el.serialize());
+		},
+
 		updateHtml: function(values) {
-			var cacheId = this.getHtmlCacheId(values);
-
-			if (typeof htmlCache[cacheId] != 'undefined') {
-				this.set('html', htmlCache[cacheId]);
-				return;
-			}
-
 			fw.loading.show(fwLoadingId);
 
 			this.set('html', '');
 
 			var modal = this;
 
-			jQuery.ajax({
-				url: ajaxurl,
-				type: 'POST',
-				data: {
-					action: 'fw_backend_options_render',
-					options: JSON.stringify(this.get('options')),
-					values: typeof values == 'undefined' ? this.get('values') : values,
-					data: {
-						name_prefix: 'fw_edit_options_modal',
-						id_prefix: 'fw-edit-options-modal-'
-					}
-				},
-				dataType: 'json',
-				success: function (response, status, xhr) {
-					fw.loading.hide(fwLoadingId);
+			var promise = fw.options.fetchHtml(
+				this.get('options'),
+				typeof values == 'undefined' ? this.get('values') : values
+			);
 
-					if (!response.success) {
-						modal.set('html', 'Error: '+ response.data.message);
-						return;
-					}
-
-					htmlCache[cacheId] = response.data.html;
-
-					modal.set('html', response.data.html);
-				},
-				error: function (xhr, status, error) {
-					fw.loading.hide(fwLoadingId);
-
-					modal.set('html', status+ ': '+ error.message);
+			promise.then(function (html, response) {
+				if (response && _.isEmpty(modal.get('values'))) {
+					// fixes https://github.com/ThemeFuse/Unyson/issues/1042#issuecomment-244364121
+					modal.set(
+						'values',
+						response.data.default_values,
+						{silent: modal.get('silentReceiveOfDefaultValues')}
+					);
 				}
+			});
+
+			promise.always(function (html) {
+				fw.loading.hide(fwLoadingId);
+				modal.set('html', html);
 			});
 		}
 	});
@@ -1376,10 +1574,10 @@ fw.getQueryString = function(name) {
 				id: id,
 				position: {
 					viewport: $(document.body),
-					at: 'top center',
-					my: 'bottom center',
+					at: $i.attr('data-custom-at') ? ( $i.attr('data-custom-at')) : 'top center',
+					my: $i.attr('data-custom-my') ? ( $i.attr('data-custom-my')) : 'bottom center',
 					adjust: {
-						y: 2
+						y: $i.attr('data-adjust') ? ( + $i.attr('data-adjust')) : 2
 					}
 				},
 				style: {
@@ -1547,7 +1745,9 @@ fw.soleModal = (function(){
 				hidePrevious: false // just replace the modal content or hide the previous modal and open it again with new content
 				updateIfCurrent: false // if current open modal has the same id as modal requested to show, update it without reopening
 				backdrop: null // true - light, false - dark
+				afterOpenStart: function(){} // before open animation starts
 				afterOpen: function(){}
+				afterCloseStart: function(){} // before close animation starts
 				afterClose: function(){}
 			}
 			*/
@@ -1675,6 +1875,8 @@ fw.soleModal = (function(){
 		},
 		setSize: function(width, height) {
 			var $size = this.$modal.find('> .media-modal');
+			var $modal = this.$modal;
+			$modal.addClass('fw-modal-opening');
 
 			if (
 				$size.height() != height
@@ -1686,6 +1888,10 @@ fw.soleModal = (function(){
 					'width': width +'px'
 				}, this.animationTime);
 			}
+
+			setTimeout(function () {
+				$modal.removeClass('fw-modal-opening');
+			}, this.animationTime);
 
 			$size = undefined;
 		},
@@ -1715,7 +1921,9 @@ fw.soleModal = (function(){
 						backdrop: null,
 						customClass: null,
 						afterOpen: function(){},
-						afterClose: function(){}
+						afterOpenStart: function(){},
+						afterClose: function(){},
+						afterCloseStart: function(){}
 					}, opts || {});
 
 					// hide close button if close is not allowed
@@ -1813,6 +2021,7 @@ fw.soleModal = (function(){
 
 			this.setSize(this.current.width, this.current.height);
 
+			this.current.afterOpenStart(this.$modal);
 			this.currentMethodTimeoutId = setTimeout(_.bind(function() {
 				this.current.afterOpen();
 
@@ -1872,6 +2081,7 @@ fw.soleModal = (function(){
 
 			if (this.queue.length && !this.queue[0].hidePrevious) {
 				// replace content
+				this.current.afterCloseStart(this.$modal);
 				this.$getContent().fadeOut('fast', _.bind(function(){
 					this.current.afterClose();
 
@@ -1894,6 +2104,7 @@ fw.soleModal = (function(){
 
 			this.$modal.addClass('fw-modal-closing');
 
+			this.current.afterCloseStart(this.$modal);
 			this.currentMethodTimeoutId = setTimeout(_.bind(function(){
 				this.current.afterClose();
 
@@ -1967,6 +2178,10 @@ fw.soleModal = (function(){
 				}
 
 				jQuery.each(messages, function(messageId, message){
+					if (!typeTitle.length) {
+						return;
+					}
+
 					typeHtml.push(
 						'<li>'+
 							'<h2 class="'+ typeMessageClass +'"><span class="'+ typeIconClass +'"></span> '+ typeTitle +'</h2>'+
@@ -1986,3 +2201,224 @@ fw.soleModal = (function(){
 		}
 	};
 })();
+
+/**
+ * Simple mechanism of getting confirmations from the user.
+ *
+ * Usage:
+ *
+ * var confirm = fw.soleConfirm.create();
+ * confirm.result.then(function (data) {
+ *   // SUCCESS!!
+ * });
+ *
+ * confirm.result.fail(function (data) {
+ *   // FAIL!!
+ * });
+ *
+ * confirm.show();
+ *
+ * Note: confirm.result is a full-featured jQuery.Deferred object, you can also
+ * use methods like always, done, jQuery.when with it.
+ *
+ * Warning:
+ *   You confirm object will be garbage collected after the user will pick an
+ *   option, that is, it will become null. You should create one more confirm
+ *   afterwards, if you need it.
+ *
+ * TODO:
+ *  1. Maybe pass unknown options to fw.soleModal itself.
+ */
+fw.soleConfirm = (function ($) {
+	var hashMap = {};
+
+	function create (opts) {
+		var confirm = new Confirm(opts);
+		hashMap[confirm.id] = confirm;
+		return hashMap[confirm.id];
+	}
+
+	function Confirm (opts) {
+		this.result = jQuery.Deferred();
+		this.id = fw.randomMD5();
+
+		this.opts = _.extend({
+			severity: 'info', // warning | info
+			message: null,
+			backdrop: null,
+			renderFunction: null,
+			shouldResolvePromise: function (confirm, el, action) { return true; },
+			okHTML: _fw_localized.l10n.ok,
+			cancelHTML: _fw_localized.l10n.cancel,
+			customClass: ''
+		}, opts);
+	}
+
+	Confirm.prototype.destroy = function () {
+		hashMap[this.id] = null;
+		delete hashMap[this.id];
+	}
+
+	/**
+	 * Attached listeners on this.result will be lost after this operation.
+	 * You'll have to add them once again.
+	 */
+	Confirm.prototype.reset = function () {
+		if (hashMap[this.id]) {
+			throw "You can't reset till your promise is not resolved! Do a .destroy() if you don't need Confirm anymore!";
+		}
+
+		if (this.result.isRejected() || this.result.isResolved()) {
+			this.result = jQuery.Deferred();
+		}
+
+		hashMap[this.id] = this;
+	};
+
+	Confirm.prototype.show = function () {
+		this._checkIsSet();
+
+		fw.soleModal.show(this.id, this._getHtml(), {
+			wrapWithTable: false,
+			showCloseButton: false,
+			allowClose: false, // a confirm window can't be closed on click of it's backdrop
+			backdrop: this.opts.backdrop,
+			customClass: 'fw-sole-confirm-modal fw-sole-confirm-' + this.opts.severity + ' ' + this.opts.customClass,
+			updateIfCurrent: true,
+
+			afterOpenStart: _.bind(this._fireEvents, this),
+			afterCloseStart: _.bind(this._teardownEvents, this),
+
+			onFireEvents: jQuery.noop,
+			onTeardownEvents: jQuery.noop
+		});
+	};
+
+	Confirm.prototype.hide = function (reason) {
+		this._checkIsSet();
+
+		fw.soleModal.hide(this.id);
+	};
+
+	//////////////////
+
+	Confirm.prototype._fireEvents = function ($modal) {
+		$modal.attr('data-fw-sole-confirm-id', this.id);
+
+		$modal.find('.fw-sole-confirm-button')
+			.add(
+				$modal.find('.media-modal-backdrop')
+			)
+			.on('click.fw-sole-confirm', _.bind(this._handleClose, this));
+
+		if (this.opts.onFireEvents) {
+			this.opts.onFireEvents(this, $modal[0]);
+		}
+	};
+
+	Confirm.prototype._teardownEvents = function ($modal) {
+		$modal.find('.fw-sole-confirm-button')
+			.add(
+				$modal.find('.media-modal-backdrop')
+			)
+			.off('click.fw-sole-confirm');
+
+		if (this.opts.onTeardownEvents) {
+			this.opts.onTeardownEvents(this, $modal[0]);
+		}
+	};
+
+	Confirm.prototype._checkIsSet = function () {
+		if (! hashMap[this.id]) {
+			throw "You can't do operations on fullfilled Confirm! Do a .reset() first.";
+		}
+	};
+
+	Confirm.prototype._handleClose = function (event) {
+        event.preventDefault();
+
+		var $el = $(event.target);
+
+		if ($el.hasClass('media-modal-backdrop')) {
+
+			// do not do any transformation on $el here by intent
+
+		} else if (! $el.hasClass('fw-sole-confirm-button')) {
+			$el = $el.closest('.fw-sole-confirm-button');
+		}
+
+		var action = $el.attr('data-fw-sole-confirm-action') || 'reject';
+		var id = $el.closest('.fw-sole-modal').attr('data-fw-sole-confirm-id');
+		var confirm = hashMap[id];
+
+		if (confirm) {
+			var modal_container = $el.closest('.fw-sole-modal')[0];
+
+			if (action === 'reject') {
+				confirm.result.reject({
+					confirm: confirm,
+					modal_container: modal_container
+				});
+			} else {
+				var shouldHideAfterResolve = confirm.opts.shouldResolvePromise(
+					confirm, modal_container
+				);
+
+				if (! shouldHideAfterResolve) {
+					return;
+				}
+
+				// probably keep this syntax for another actions in future
+				_.contains(['resolve'], action) &&
+					confirm.result[action]({
+						confirm: confirm,
+						modal_container: $el.closest('.fw-sole-modal')[0]
+					});
+
+			}
+
+			confirm.hide();
+
+			confirm.destroy();
+			confirm = null;
+		}
+	};
+
+	Confirm.prototype._getHtml = function () {
+		if (this.opts.renderFunction) {
+			return this.opts.renderFunction(this);
+		}
+
+		var topHtml = '';
+
+		var iconClass = 'dashicons-' + this.opts.severity;
+		var icon = '<span class="dashicons ' + iconClass + '"></span>';
+		var heading = '<h1>' + fw.capitalizeFirstLetter(this.opts.severity) + '</h1>';
+		var message = this.opts.message ? '<p>' + this.opts.message + '</p>' : '';
+
+		topHtml = icon + heading + message;
+
+		var cancelButton = $('<button>', {
+			html: this.opts.cancelHTML
+		}).attr({
+			'data-fw-sole-confirm-action': 'reject',
+			type: 'button',
+		}).addClass('fw-sole-confirm-button button');
+
+		var okButton = $('<button>', {
+			html: this.opts.okHTML
+		}).attr({
+			'data-fw-sole-confirm-action': 'resolve',
+			type: 'button',
+		}).addClass('fw-sole-confirm-button button button-primary');
+
+		return topHtml + selfHtml(cancelButton) + selfHtml(okButton);
+
+		function selfHtml (el) { return $('<div>').append(el).html(); }
+	};
+
+	return {
+		create: create
+	};
+})(jQuery);
+

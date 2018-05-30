@@ -41,6 +41,10 @@ class Fw_Option_Type_Image_Picker extends FW_Option_Type
 		);
 	}
 
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
+	}
+
 	/**
 	 * @internal
 	 * {@inheritdoc}
@@ -104,7 +108,7 @@ class Fw_Option_Type_Image_Picker extends FW_Option_Type
 		{
 			$html .= '<select ' . fw_attr_to_html($option['attr']) . '>';
 
-			if (!empty($option['blank']) and $option['blank'] === true) {
+			if ($option['blank'] === true) {
 				$html .= '<option value=""></option>';
 			}
 
@@ -117,8 +121,7 @@ class Fw_Option_Type_Image_Picker extends FW_Option_Type
 					$attr['selected'] = 'selected';
 				}
 
-				if (is_string($choice)) {
-					// is 'http://.../small.png'
+				if (is_string($choice)) { // is 'http://.../small.png'
 					$choice = array(
 						'small' => array(
 							'src' => $choice
@@ -126,33 +129,35 @@ class Fw_Option_Type_Image_Picker extends FW_Option_Type
 					);
 				}
 
-				if (is_string($choice['small'])) {
-					// is 'http://.../small.png'
+				if (is_string($choice['small'])) { // is 'http://.../small.png'
 					$choice['small'] = array(
 						'src' => $choice['small']
 					);
 				}
 				$attr['data-small-img-attr'] = json_encode($choice['small']);
 
-				// required by image-picker plugin
-				$attr['data-img-src'] = $choice['small']['src'];
+				$attr['data-img-src'] = $choice['small']['src']; // required by image-picker plugin
 
-				if (!empty($choice['large'])) {
-					if (is_string($choice['large'])) {
+				if ( ! empty( $choice['large'] ) ) {
+					if ( is_string( $choice['large'] ) ) {
 						// is 'http://.../large.png'
 						$choice['large'] = array(
 							'src' => $choice['large']
 						);
 					}
 
-					$attr['data-large-img-attr'] = json_encode($choice['large']);
+					$attr['data-large-img-attr'] = json_encode( $choice['large'] );
 
-					$pre_load_images_html .= fw_html_tag('img', array('src' => $choice['large']['src']));
+					$pre_load_images_html .= fw_html_tag( 'img', $choice['large'] );
 				}
 
 				if (!empty($choice['data'])) {
 					// used in js events
 					$attr['data-extra-data'] = json_encode($choice['data']);
+				}
+
+				if (!empty($choice['attr'])) {
+					$attr = array_merge($choice['attr'], $attr);
 				}
 
 				$html .= fw_html_tag('option', $attr, fw_htmlspecialchars(isset($choice['label']) ? $choice['label'] : ''));
@@ -171,13 +176,16 @@ class Fw_Option_Type_Image_Picker extends FW_Option_Type
 	 */
 	protected function _get_value_from_input($option, $input_value)
 	{
-		if (is_null($input_value)) {
+		if (!is_string($input_value)) {
 			return $option['value'];
 		}
 
 		if (!isset($option['choices'][$input_value])) {
-			if (
-				empty($option['choices']) ||
+			if ($option['blank']) {
+				$input_value = '';
+			} elseif (
+				! empty($option['choices'])
+				&&
 				isset($option['choices'][ $option['value'] ])
 			) {
 				$input_value = $option['value'];
@@ -198,5 +206,3 @@ class Fw_Option_Type_Image_Picker extends FW_Option_Type
 		return 'auto';
 	}
 }
-
-FW_Option_Type::register('FW_Option_Type_Image_Picker');

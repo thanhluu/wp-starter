@@ -2,7 +2,7 @@ jQuery(document).ready(function($){
 	var helpers = {
 		optionClass: 'fw-option-type-color-picker',
 		eventNamespace: '.fwOptionTypeColorPicker',
-		colorRegex: /^#[a-f0-9]{3}([a-f0-9]{3})?$/,
+		colorRegex: /^#([a-f0-9]{3}){1,2}$/i,
 		localized: window._fw_option_type_color_picker_localized,
 		/**
 		 * Return true if color is dark
@@ -27,17 +27,11 @@ jQuery(document).ready(function($){
 		getInstance: function ($iris) {
 			return $iris.data('a8cIris');
 		},
-		updatePreview: function ($input, color) {
-			if (this.isColorValid(color)) {
-				$input.css({
-					'background-color': color,
-					'color': this.isColorDark(color) ? '#FFFFFF' : '#000000'
-				});
+		updatePreview: function ( $input, color ) {
+			if ( this.isColorValid( color ) ) {
+				$input.attr( 'style', 'background-color:' + color + ' !important; color:' + ( this.isColorDark( color ) ? '#FFFFFF' : '#000000' ) + ' !important;' );
 			} else {
-				$input.css({
-					'background-color': '',
-					'color': ''
-				});
+				$input.css( {'background-color': '', 'color': ''} );
 			}
 		},
 		increment: 0
@@ -54,6 +48,8 @@ jQuery(document).ready(function($){
 			 * Do not initialize all pickers on the page, for performance reasons, maybe none of them will be opened
 			 */
 			$input.one('focus', function(){
+				var initialValue = $input.val();
+
 				$input.iris({
 					hide: true,
 					defaultColor: false,
@@ -64,6 +60,14 @@ jQuery(document).ready(function($){
 						 */
 						clearTimeout(changeTimeoutId);
 						changeTimeoutId = setTimeout(function(){
+							// prevent useless 'change' event when nothing has changed (happens right after init)
+							if (initialValue !== null && $input.val() === initialValue) {
+								initialValue = null;
+								return;
+							} else {
+								initialValue = null; // make sure the above `if` is executed only once
+							}
+
 							$input.trigger('fw:color:picker:changed', { // should be 'fw:option-type:color-picker:change'
 								$element: $input,
 								event   : event,
@@ -74,6 +78,8 @@ jQuery(document).ready(function($){
 					},
 					palettes: JSON.parse($input.attr('data-palettes'))
 				});
+
+				$input.addClass('iris-initialized');
 
 				var $picker = helpers.getInstance($input).picker;
 
@@ -181,24 +187,5 @@ jQuery(document).ready(function($){
 
 			$input.addClass('initialized');
 		});
-
-		/*
-		// fixme: where this code is needed? why it does full page selectors instead of only specific initialized option?
-		$('.fw-inner').on('click', '.fw-option-type-color-picker', function () {
-			var $this = $(this);
-			$('.fw-option-type-color-picker.initialized').iris('hide');
-
-			$this.iris('show');
-
-			var widthParent = $this.closest('.fw-backend-option').outerWidth(),
-				widthPiker = $this.next('.iris-picker').outerWidth(),
-				offsetPiker = ($this.next('.iris-picker').offset().left - $this.closest('.fw-backend-option').offset().left) + widthPiker;
-
-			if (offsetPiker > widthParent) {
-				$this.next('.iris-picker').css('right', '0');
-			}
-			return false;
-		});
-		*/
 	});
 });

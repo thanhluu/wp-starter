@@ -38,25 +38,42 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 	 */
 	protected function _enqueue_static($id, $option, $data)
 	{
+		static $enqueue = true;
 		$uri = fw_get_framework_directory_uri('/includes/option-types/' . $this->get_type());
 
-		wp_enqueue_style(
-			'fw-option-type-' . $this->get_type(),
-			$uri . '/static/css/multi-picker.css',
-			array(),
-			fw()->manifest->get_version()
-		);
-		wp_enqueue_script(
-			'fw-option-type-' . $this->get_type(),
-			$uri . '/static/js/multi-picker.js',
-			array('jquery', 'fw-events'),
-			fw()->manifest->get_version(),
-			true
-		);
+		if ($enqueue) {
+			wp_enqueue_style(
+				'fw-option-type-' . $this->get_type(),
+				$uri . '/static/css/multi-picker.css',
+				array(),
+				fw()->manifest->get_version()
+			);
+
+			wp_enqueue_script(
+				'fw-option-type-' . $this->get_type(),
+				$uri . '/static/js/multi-picker.js',
+				array('jquery', 'fw-events'),
+				fw()->manifest->get_version(),
+				true
+			);
+
+			$enqueue = false;
+		}
 
 		fw()->backend->enqueue_options_static($this->prepare_option($id, $option));
 
 		return true;
+	}
+
+	public function _get_data_for_js($id, $option, $data = array()) {
+		return false;
+	}
+
+	/**
+	 * Hide label for each multi-picker by default
+	 */
+	public function _default_label($id, $option) {
+		return false;
 	}
 
 	/**
@@ -66,6 +83,7 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 	protected function _render($id, $option, $data)
 	{
 		$options_array = $this->prepare_option($id, $option);
+
 		unset($option['attr']['name'], $option['attr']['value']);
 
 		if ($option['show_borders']) {
@@ -74,34 +92,66 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 			$option['attr']['class'] .= ' fw-option-type-multi-picker-without-borders';
 		}
 
+		$option['attr']['class'] .= is_array(
+			$option['picker']
+		) ? '' : ' fw-option-type-multi-picker-dynamic';
+
+		// Allow picker to be another option in the same context
+		// JS will watch its changes accordingly
+		if (is_string($option['picker'])) {
+			$option['attr']['data-fw-dynamic-picker-path'] = $option['picker'];
+		}
+
 		/**
 		 * Leave only select choice options to be rendered in the browser
 		 * the rest move to attr[data-options-template] to be rendered on choice change.
 		 * This should improve page loading speed.
 		 */
-		{
+		$theme_has_lazy_multi_picker = fw()->theme->get_config(
+			'lazy_multi_picker', true
+		);
+
+		if (is_array($option['picker']) && $theme_has_lazy_multi_picker) {
 			{
 				reset($option['picker']);
 				$picker_key   = key($option['picker']);
 				$picker_type  = $option['picker'][$picker_key]['type'];
 				$picker       = $option['picker'][$picker_key];
-				$picker_value = fw()->backend->option_type($picker_type)->get_value_from_input(
-					$picker,
-					isset($data['value'][$picker_key]) ? $data['value'][$picker_key] : null
-				);
+
+				if ( ! is_string($picker_value = fw()->backend->option_type($picker_type)->get_value_from_input(
+					$picker, isset($data['value'][$picker_key]) ? $data['value'][$picker_key] : null
+				))) {
+					/**
+					 * Extract the string value that is used as array key
+					 */
+					switch ($picker_type) {
+						case 'icon-v2':
+							$picker_value = fw_akg('type', $picker_value, 'icon-font');
+							break;
+						default:
+							if ( ! is_string($picker_value = apply_filters(
+								'fw:option-type:multi-picker:string-value:'. $picker_type, // @since 2.5.8
+								$picker_value
+							))) {
+								trigger_error(
+									'[multi-picker] Cannot detect string value for picker type '. $picker_type,
+									E_USER_WARNING
+								);
+								$picker_value = '?';
+							}
+					}
+				}
 			}
 
 			$skip_first = true;
 			foreach ($options_array as $group_id => &$group) {
 				if ($skip_first) {
-					// first is picker
 					$skip_first = false;
-					continue;
+					continue; // first is picker
 				}
 
 				if ($group_id === $id .'-'. $picker_value) {
-					// skip selected choice options
-					continue;
+					continue; // skip selected choice options
 				}
 
 				$options_array[$group_id]['attr']['data-options-template'] = fw()->backend->render_options(
@@ -109,6 +159,7 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 					'id_prefix' => $data['id_prefix'] . $id . '-',
 					'name_prefix' => $data['name_prefix'] . '[' . $id . ']',
 				));
+
 				$options_array[$group_id]['options'] = array();
 			}
 		}
@@ -132,7 +183,9 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 	 * @param string $picker_type
 	 * @return array( 'choice_id' => array( Choice Options ) )
 	 */
-	private function get_picker_choices($option, $picker, $picker_type) {
+	private function get_picker_choices($option) {
+		return $option['choices'];
+
 		switch($picker_type) {
 			case 'switch':
 				$picker_choices = array_intersect_key($option['choices'], array(
@@ -158,6 +211,15 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 			case 'image-picker':
 				$picker_choices = array_intersect_key($option['choices'], $picker['choices']);
 				break;
+			case 'icon-v2':
+				$picker_choices = array_intersect_key(
+					$option['choices'],
+					array(
+						'icon-font' => array(),
+						'custom-upload' => array()
+					)
+				);
+				break;
 			default:
 				$picker_choices = apply_filters(
 					'fw_option_type_multi_picker_choices:'. $picker_type,
@@ -180,18 +242,15 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 				E_USER_ERROR
 			);
 		}
+		
+		/**
+		 * @since 2.6.11
+		 */
+		$option = $this->prepare_choices($option);
 
-		{
-			reset($option['picker']);
-			$picker_key             = key($option['picker']);
-			$picker                 = $option['picker'][$picker_key];
-			$picker_type            = $picker['type'];
-		}
 
 		$picker_choices = $this->get_picker_choices(
-			$option,
-			$picker,
-			$picker_type
+			$option
 		);
 
 		$hide_picker = '';
@@ -212,10 +271,11 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 			&&
 			true === $option['show_borders']
 		) {
-			$show_borders = 'fw-show-borders';
+			$show_borders = 'fw-show-borders fw-option-type-multi-show-borders';
 		}
 
 		$choices_groups = array();
+
 		foreach ($picker_choices as $key => $set) {
 			if (!empty($set)) {
 				$choices_groups[$id . '-' . $key] = array(
@@ -237,17 +297,89 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 			}
 		}
 
-		$picker_group = array(
-			$id . '-picker' => array(
-				'type'    => 'group',
-				'desc'    => false,
-				'label'   => false,
-				'attr'    => array('class' => $show_borders .' '. $hide_picker .' picker-group picker-type-'. $picker_type),
-				'options' => array($picker_key => $picker)
-			)
-		);
+		$picker_group = null;
 
-		return array_merge($picker_group, $choices_groups);
+		if (is_array($option['picker'])) {
+			{
+				reset($option['picker']);
+				$picker_key  = key($option['picker']);
+				$picker      = $option['picker'][$picker_key];
+				$picker_type = $picker['type'];
+			}
+
+			$picker_group = array(
+				$id . '-picker' => array(
+					'type'    => 'group',
+					'desc'    => false,
+					'label'   => false,
+					'attr'    => array('class' => $show_borders .' '. $hide_picker .' picker-group picker-type-'. $picker_type),
+					'options' => array($picker_key => $picker)
+				)
+			);
+
+		}
+
+		return $picker_group ? array_merge($picker_group, $choices_groups) : $choices_groups;
+	}
+	
+	/**
+	 * Prepare `choices` array.
+	 *
+	 * @since 2.6.11
+	 * @param array $option Options.
+	 * @return array
+	 */
+	protected function prepare_choices($option) {
+		$result = array();
+		$choices = fw_akg('choices', $option);
+
+		if (is_array($choices)) {
+			foreach ($choices as $key => $settings) {
+				if (isset($settings['for']) && isset($settings['options'])) {
+					if (is_array($settings['for'])) {
+						// Insert location: after/before.
+						$location = fw_akg('location', $settings, 'before');
+						
+						foreach ($settings['for'] as $name) {
+							if (isset($choices[$name])) {
+								if ('before' === $location) {
+									$result[$name] = array_merge(
+										$settings['options'], $choices[$name]
+									);
+								} else {
+									$result[$name] = array_merge(
+										$choices[$name], $settings['options']
+									);
+								}
+							} else {
+								if (isset($result[$name])) {
+									if ('before' === $location) {
+										$result[$name] = array_merge(
+											$settings['options'], $result[$name]
+										);
+									} else {
+										$result[$name] = array_merge(
+											$result[$name], $settings['options']
+										);
+									}
+								} else {
+									$result[$name] = $settings['options'];
+								}
+							}
+						}
+					}
+				} else {
+					if ( ! isset($result[$key]) ) {
+						$result[$key] = $settings;
+					}
+				}
+			}
+		}
+
+		// Replace old `choices` with new structure.
+		fw_aks('choices', $result, $option);
+		
+		return $option;
 	}
 
 	/**
@@ -255,29 +387,32 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 	 */
 	protected function _get_value_from_input($option, $input_value)
 	{
-		{
+		$value = array();
+		
+		/**
+		 * @since 2.6.11
+		 */
+		$option = $this->prepare_choices($option);
+
+		if (is_array($option['picker'])) {
 			reset($option['picker']);
 			$picker_key  = key($option['picker']);
 			$picker_type = $option['picker'][$picker_key]['type'];
 			$picker      = $option['picker'][$picker_key];
-		}
 
-		$value = array();
-
-		if (is_null($input_value) && isset($option['value'][$picker_key])) {
-			$value[$picker_key] = $option['value'][$picker_key];
-		} else {
-			$value[$picker_key] = fw()->backend->option_type($picker_type)->get_value_from_input(
-				$picker,
-				isset($input_value[$picker_key]) ? $input_value[$picker_key] : null
-			);
+			if (is_null($input_value) && isset($option['value'][$picker_key])) {
+				$value[$picker_key] = $option['value'][$picker_key];
+			} else {
+				$value[$picker_key] = fw()->backend->option_type($picker_type)->get_value_from_input(
+					$picker,
+					isset($input_value[$picker_key]) ? $input_value[$picker_key] : null
+				);
+			}
 		}
 
 		foreach (
 			$this->get_picker_choices(
-				$option,
-				$picker,
-				$picker_type
+				$option
 			)
 			as $choice_id => $choice_options
 		) {
@@ -295,5 +430,40 @@ class FW_Option_Type_Multi_Picker extends FW_Option_Type
 
 		return $value;
 	}
+
+	/**
+	 * {@inheritdoc}
+	 * fixes https://github.com/ThemeFuse/Unyson/issues/1440
+	 */
+	protected function _storage_load($id, array $option, $value, array $params) {
+		if (apply_filters('fw:option-type:multi-picker:fw-storage:process-inner-options', false)) {
+			foreach ($option['choices'] as $choice_id => $choice) {
+				foreach (fw_extract_only_options($choice) as $opt_id => $opt) {
+					$value[$choice_id][$opt_id] = fw()->backend->option_type($opt['type'])->storage_load(
+						$opt_id, $opt, $value[$choice_id][$opt_id], $params
+					);
+				}
+			}
+		}
+
+		return fw_db_option_storage_load($id, $option, $value, $params);
+	}
+
+	/**
+	 * {@inheritdoc}
+	 * fixes https://github.com/ThemeFuse/Unyson/issues/1440
+	 */
+	protected function _storage_save($id, array $option, $value, array $params) {
+		if (apply_filters('fw:option-type:multi-picker:fw-storage:process-inner-options', false)) {
+			foreach ($option['choices'] as $choice_id => $choice) {
+				foreach (fw_extract_only_options($choice) as $opt_id => $opt) {
+					$value[$choice_id][$opt_id] = fw()->backend->option_type($opt['type'])->storage_save(
+						$opt_id, $opt, $value[$choice_id][$opt_id], $params
+					);
+				}
+			}
+		}
+
+		return fw_db_option_storage_save($id, $option, $value, $params);
+	}
 }
-FW_Option_Type::register('FW_Option_Type_Multi_Picker');

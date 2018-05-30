@@ -48,6 +48,8 @@ class FW_Container_Type_Popup extends FW_Container_Type {
 				} else {
 					$attr['data-modal-size'] = $defaults['modal-size'];
 				}
+
+				$attr['id'] = $data['id_prefix'] . $id;
 			}
 
 			$html .=
@@ -72,4 +74,3 @@ class FW_Container_Type_Popup extends FW_Container_Type {
 		return $html;
 	}
 }
-FW_Container_Type::register('FW_Container_Type_Popup');

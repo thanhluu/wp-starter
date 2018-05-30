@@ -113,6 +113,10 @@ class FW_Flash_Messages
 	 */
 	public static function _print_backend()
 	{
+		if (!session_id()) {
+			return; // fixes https://github.com/ThemeFuse/Unyson/issues/2219
+		}
+
 		self::process_pending_remove_ids();
 
 		$html = array_fill_keys(array_keys(self::$available_types), '');
@@ -197,105 +201,18 @@ class FW_Flash_Messages
 		$messages = self::get_messages();
 
 		if ($clear) {
-			self::set_messages(array());
+			self::_clear();
 		}
 
 		return $messages;
 	}
-}
 
-if (is_admin()) {
 	/**
-	 * Start the session before the content is sent to prevent the "headers already sent" warning
-	 * @internal
+	 * Clear the FW_Flash_Messages messages
+	 *
+	 * @since 2.6.15
 	 */
-	function _action_fw_flash_message_backend_prepare() {
-		if (!session_id()) {
-			session_start();
-		}
+	public static function _clear() {
+		self::set_messages(array());
 	}
-	add_action('current_screen', '_action_fw_flash_message_backend_prepare', 9999);
-
-	/**
-	 * Display flash messages in backend as notices
-	 */
-	add_action( 'admin_notices', array( 'FW_Flash_Messages', '_print_backend' ) );
-} else {
-	/**
-	 * Start the session before the content is sent to prevent the "headers already sent" warning
-	 * @internal
-	 */
-	function _action_fw_flash_message_frontend_prepare() {
-		if (!session_id()) {
-			session_start();
-		}
-	}
-	add_action('send_headers', '_action_fw_flash_message_frontend_prepare', 9999);
-
-	/**
-	 * Print flash messages in frontend if this has not been done from theme
-	 */
-	function _action_fw_flash_message_frontend_print() {
-		if (FW_Flash_Messages::_frontend_printed()) {
-			return;
-		}
-
-		if (!FW_Flash_Messages::_print_frontend()) {
-			return;
-		}
-
-		?>
-		<script type="text/javascript">
-			(function(){
-				if (typeof jQuery === "undefined") {
-					return;
-				}
-
-				jQuery(function($){
-					var $container;
-
-					// Try to find the content element
-					{
-						var selector, selectors = [
-							'#main #content',
-							'#content #main',
-							'#main',
-							'#content',
-							'#content-container',
-							'#container',
-							'.container:first'
-						];
-
-						while (selector = selectors.shift()) {
-							$container = $(selector);
-
-							if ($container.length) {
-								break;
-							}
-						}
-					}
-
-					if (!$container.length) {
-						// Try to find main page H1 container
-						$container = $('h1:first').parent();
-					}
-
-					if (!$container.length) {
-						// If nothing found, just add to body
-						$container = $(document.body);
-					}
-
-					$(".fw-flash-messages").prependTo($container);
-				});
-			})();
-		</script>
-		<style type="text/css">
-			.fw-flash-messages .fw-flash-type-error { color: #f00; }
-			.fw-flash-messages .fw-flash-type-warning { color: #f70; }
-			.fw-flash-messages .fw-flash-type-success { color: #070; }
-			.fw-flash-messages .fw-flash-type-info { color: #07f; }
-		</style>
-		<?php
-	}
-	add_action('wp_footer', '_action_fw_flash_message_frontend_print', 9999);
 }

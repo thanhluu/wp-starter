@@ -1,5 +1,5 @@
 {
-  "name": "wp-starter",
+  "name": "WP Starter",
   "version": "1.0.0",
   "homepage": "http://www.example.com",
   "authors": [
@@ -12,8 +12,9 @@
     "dev/vendor"
   ],
   "dependencies": {
-    "fontawesome": "^4.5.0",
-    "bootstrap": "^3.3.6",
-    "modernizr": "^2.8.3"
+    "bootstrap": "^4.1.1",
+    "jquery" : "1.9.1",
+    "popper.js" : "^1.14.3",
+    "font-awesome": "^5.0.13"
   }
 }

@@ -11,6 +11,10 @@ class FW_Option_Type_Datetime_Picker extends FW_Option_Type {
 		return 'fixed';
 	}
 
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
+	}
+
 	/**
 	 * Detetime-picker options on http://xdsoft.net/jqplugins/datetimepicker/ excepts: [value]
 	 * Additional options:
@@ -62,9 +66,11 @@ class FW_Option_Type_Datetime_Picker extends FW_Option_Type {
 		$option['datetime-picker']['lang'] = substr(get_locale(), 0, 2);
 		$option['attr']['data-moment-format'] = $moment_format;
 
-		echo '<div ' . fw_attr_to_html($wrapper_attr) .' >';
-		echo fw()->backend->option_type( 'text' )->render( $id, $option, $data );
-		echo '</div>';
+		$html = '<div ' . fw_attr_to_html($wrapper_attr) .' >';
+		$html .= fw()->backend->option_type( 'text' )->render( $id, $option, $data );
+		$html .= '</div>';
+
+		return $html;
 	}
 
 	/**
@@ -154,4 +160,3 @@ class FW_Option_Type_Datetime_Picker extends FW_Option_Type {
 	}
 
 }
-FW_Option_Type::register('FW_Option_Type_Datetime_Picker');

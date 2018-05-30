@@ -21,6 +21,10 @@ class FW_Option_Type_Background_Image extends FW_Option_Type {
 		);
 	}
 
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
+	}
+
 	/**
 	 * @internal
 	 * {@inheritdoc}
@@ -139,5 +143,3 @@ class FW_Option_Type_Background_Image extends FW_Option_Type {
 		return $input_value;
 	}
 }
-
-FW_Option_Type::register('FW_Option_Type_Background_Image');

@@ -12,24 +12,34 @@ class FW_Option_Type_Popup extends FW_Option_Type {
 		return 'fixed';
 	}
 
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
+	}
+
 	/**
 	 * @internal
 	 * {@inheritdoc}
 	 */
 	protected function _enqueue_static( $id, $option, $data ) {
-		wp_enqueue_style(
-			'fw-option-' . $this->get_type(),
-			fw_get_framework_directory_uri( '/includes/option-types/' . $this->get_type() . '/static/css/styles.css' ),
-			array( 'fw' )
-		);
+		static $enqueue = true;
 
-		wp_enqueue_script(
-			'fw-option-' . $this->get_type(),
-			fw_get_framework_directory_uri( '/includes/option-types/' . $this->get_type() . '/static/js/' . $this->get_type() . '.js' ),
-			array( 'underscore', 'fw-events', 'jquery-ui-sortable', 'fw' ),
-			false,
-			true
-		);
+		if ($enqueue) {
+			wp_enqueue_style(
+				'fw-option-' . $this->get_type(),
+				fw_get_framework_directory_uri( '/includes/option-types/' . $this->get_type() . '/static/css/styles.css' ),
+				array( 'fw' )
+			);
+
+			wp_enqueue_script(
+				'fw-option-' . $this->get_type(),
+				fw_get_framework_directory_uri( '/includes/option-types/' . $this->get_type() . '/static/js/' . $this->get_type() . '.js' ),
+				array( 'underscore', 'fw-events', 'jquery-ui-sortable', 'fw' ),
+				false,
+				true
+			);
+
+			$enqueue = false;
+		}
 
 		fw()->backend->enqueue_options_static( $option['popup-options'] );
 
@@ -53,7 +63,8 @@ class FW_Option_Type_Popup extends FW_Option_Type {
 			'title'   => ( isset( $option['popup-title'] ) ) ? $option['popup-title'] : ( string ) $option['label'],
 			'options' => $this->transform_options( $option['popup-options'] ),
 			'button'  => $option['button'],
-			'size'    => $option['size']
+			'size'    => $option['size'],
+			'custom-events' => $option['custom-events']
 		) );
 
 		if ( ! empty( $data['value'] ) ) {
@@ -110,30 +121,34 @@ class FW_Option_Type_Popup extends FW_Option_Type {
 	 * @internal
 	 */
 	protected function _get_value_from_input( $option, $input_value ) {
-		if ( empty( $input_value ) ) {
-			if ( empty( $option['popup-options'] ) ) {
-				return array();
-			}
-
-			$popup_options = array();
-			foreach (fw_extract_only_options($option['popup-options']) as $popup_option_id => $popup_option) {
-				if (isset($option['value'][$popup_option_id])) {
-					$popup_option['value'] = $option['value'][$popup_option_id];
-				}
-				$popup_options[ $popup_option_id ] = $popup_option;
-			}
-
-			$values = fw_get_options_values_from_input($popup_options, array());
-		} else if (is_array( $input_value )) {
-			/**
-			 * Don't decode if we have already an array
-			 */
-			$values = $input_value;
-		} else {
-			$values = json_decode( $input_value, true );
+		if ( empty( $option['popup-options'] ) ) {
+			return array();
 		}
 
-		return $values;
+		if (is_null($input_value)) {
+			$input_value = $option['value'];
+		} else {
+			if (is_array($input_value)) {
+				// Don't decode if we have already an array
+			} else {
+				$input_value = json_decode($input_value, true);
+			}
+		}
+
+		/**
+		 * Move each option value in option array default values
+		 * because popup <input> contains options db values got from fw.OptionsModal
+		 * which can't be used as $input_value in second parameter of fw_get_options_values_from_input()
+		 */
+		$popup_options = array();
+		foreach (fw_extract_only_options($option['popup-options']) as $popup_option_id => $popup_option) {
+			if (isset($input_value[$popup_option_id])) {
+				$popup_option['value'] = $input_value[$popup_option_id];
+			}
+			$popup_options[ $popup_option_id ] = $popup_option;
+		}
+
+		return fw_get_options_values_from_input($popup_options, array());
 	}
 
 	/**
@@ -173,10 +188,14 @@ class FW_Option_Type_Popup extends FW_Option_Type {
 			/*
 			 * Array of default values for the popup options
 			 */
-			'value'         => array()
+			'value'         => array(),
+
+			'custom-events' => array(
+				'open' => false,
+				'close' => false,
+				'render' => false
+			)
 		);
 	}
 
 }
-
-FW_Option_Type::register( 'FW_Option_Type_Popup' );

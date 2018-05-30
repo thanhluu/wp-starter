@@ -33,6 +33,10 @@ class FW_Option_Type_Multi_Upload extends FW_Option_Type
 		return 'auto';
 	}
 
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
+	}
+
 	/**
 	 * @internal
 	 */
@@ -105,7 +109,9 @@ class FW_Option_Type_Multi_Upload extends FW_Option_Type
 		// attributes for the hidden input
 		$input_attr = array();
 		$input_attr['name']  = $option['attr']['name'];
+
 		$input_attr['value'] = $this->get_processed_value($data['value']);
+
 		unset($option['attr']['name'], $option['attr']['value']);
 
 		// attributes for the option wrapper
@@ -147,9 +153,11 @@ class FW_Option_Type_Multi_Upload extends FW_Option_Type
 		}
 
 		$ids = array();
+
 		foreach ($value as $attachment) {
 			$ids[] = $attachment['attachment_id'];
 		}
+
 		return json_encode($ids);
 	}
 
@@ -158,13 +166,15 @@ class FW_Option_Type_Multi_Upload extends FW_Option_Type
 		$l10n = array_merge(
 			array(
 				'button_add'    => __('Add Images', 'fw'), // TODO: add context ?
-				'button_edit'   => __('Edit', 'fw') // TODO: add context ?
+				'button_edit'   => __('Edit', 'fw'), // TODO: add context ?
+				'modal_title'   => __('Select Images', 'fw'),
 			),
 			$l10n
 		);
 		$wrapper_attr = array_merge($wrapper_attr, array(
 			'data-l10n-button-add'  => $l10n['button_add'],
 			'data-l10n-button-edit' => $l10n['button_edit'],
+			'data-l10n-modal-title' => $l10n['modal_title'],
 		));
 
 		$wrapper_attr['class'] .= ' images-only';
@@ -217,32 +227,60 @@ class FW_Option_Type_Multi_Upload extends FW_Option_Type
 		if (empty($input_value)) {
 			return $option['value'];
 		} else {
-			return $this->get_attachments_info($input_value);
+			return $this->get_attachments_info($input_value, $option);
 		}
 	}
 
-	private function get_attachments_info($attachment_ids)
+	private function get_attachments_info($attachment_ids, $option)
 	{
-		$decoded_ids = json_decode($attachment_ids, true);
-		if (
-			!is_array($decoded_ids) ||
-			empty($decoded_ids)
-		) {
-			$defaults = $this->get_defaults();
-			return $defaults['value'];
+		$decoded_ids = $attachment_ids;
+
+		if ( is_string( $attachment_ids ) ) {
+			$decoded_ids = json_decode( $attachment_ids, true );
+
+			if ( ! is_array( $decoded_ids ) ) {
+				return $option['value'];
+			}
 		}
 
 		$return_arr = array();
-		foreach ($decoded_ids as $id) {
-			$url = wp_get_attachment_url($id);
-			if ($url) {
-				$return_arr[] = array(
+
+		foreach ( $decoded_ids as $id ) {
+
+			if ( isset( $id['attachment_id'] ) ) {
+				$id = $id['attachment_id'];
+			}
+
+			$url = wp_get_attachment_url( $id );
+
+			if ( $url ) {
+
+				$data = array(
 					'attachment_id' => $id,
-					'url'           => preg_replace('/^https?:\/\//', '//', $url)
+					'url'           => preg_replace( '/^https?:\/\//', '//', $url )
 				);
+
+				if ( isset( $option['sizes'] ) && is_array( $option['sizes'] ) ) {
+
+					$sizes = array();
+					$info  = wp_prepare_attachment_for_js( $id );
+
+					foreach ( $option['sizes'] as $size ) {
+
+						if ( isset( $info['sizes'][ $size ] ) ) {
+							$sizes[ $size ] = $info['sizes'][ $size ];
+						}
+					}
+
+					if ( ! empty( $sizes ) ) {
+						$data['sizes'] = $sizes;
+					}
+				}
+
+				$return_arr[] = $data;
 			}
 		}
+
 		return $return_arr;
 	}
 }
-FW_Option_Type::register('FW_Option_Type_Multi_Upload');

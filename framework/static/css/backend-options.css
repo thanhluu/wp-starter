@@ -58,7 +58,7 @@ Included on pages where backend options are rendered
 
 .fw-options-tabs-wrapper > .fw-options-tabs-list {
 	border-bottom: 1px solid #CCC;
-	padding: 0 10px;
+	/*padding: 0 10px;*/
 }
 
 .fw-options-tabs-wrapper > .fw-options-tabs-list ul,
@@ -66,11 +66,22 @@ Included on pages where backend options are rendered
 	padding: 0;
 	margin: 0;
 }
+.post-type-product .fw-options-tabs-wrapper {
+	border: none;
+	padding: 10px 0;
+}
+.post-type-product .fw-options-tabs-wrapper > .fw-options-tabs-list ul,
+.post-type-product .fw-options-tabs-wrapper > .fw-options-tabs-list ul li {
+	padding: 0 !important;
+	margin: 0 !important;
+	background: none !important;
+	border: none !important;
+}
 
 .fw-options-tabs-wrapper > .fw-options-tabs-list ul li {
 	float: left;
-	margin-right: 6px;
 }
+
 body.rtl .fw-options-tabs-wrapper > .fw-options-tabs-list ul li {
 	float: right;
 	margin-right: 0px;
@@ -79,7 +90,7 @@ body.rtl .fw-options-tabs-wrapper > .fw-options-tabs-list ul li {
 
 .fw-options-tabs-wrapper > .fw-options-tabs-list ul li a.nav-tab {
 	padding: 6px 12px;
-	font-weight: 700;
+	font-weight: 600;
 	font-size: 15px;
 	line-height: 24px;
 	text-decoration: none;
@@ -95,7 +106,7 @@ body.rtl .fw-options-tabs-wrapper > .fw-options-tabs-list ul li {
 }
 
 .postbox .fw-options-tabs-wrapper > .fw-options-tabs-list {
-	padding-top: 10px;
+	padding: 10px 10px 0 10px;
 }
 
 .postbox .fw-options-tabs-wrapper > .fw-options-tabs-list ul li a.nav-tab {
@@ -730,6 +741,12 @@ body.rtl .fw-backend-side-tabs .fw-settings-form-header .form-header-buttons {
 	min-height: 70px;
 	border-top: 1px solid #e5e5e5;
 	background: #f7f7f7;
+
+	-webkit-animation: fwFadeIn 3s ease-in;
+	-moz-animation: fwFadeIn 3s ease-in;
+	-ms-animation: fwFadeIn 3s ease-in;
+	-o-animation: fwFadeIn 3s ease-in;
+	animation: fwFadeIn 3s ease-in;
 }
 
 .fw-backend-side-tabs .fw-options-tabs-wrapper + .form-footer-buttons {
@@ -834,12 +851,12 @@ form#post .fw-options-tabs-wrapper > .fw-options-tabs-contents .fw-backend-postb
 /* begin copy from: .js .meta-box-sortables .postbox .handlediv */
 
 .fw-postbox .handlediv:before {
-	right: 12px;
+	top: 0;
+	right: 0;
+	padding: 8px 9px 8px 7px;
 	font: 400 20px/1 dashicons;
 	speak: none;
 	display: inline-block;
-	padding: 8px 10px;
-	top: 0;
 	position: relative;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
@@ -858,6 +875,10 @@ body.rtl .fw-postbox .handlediv:before {
 	content: '\f140';
 }
 
+.fw-postbox .toggle-indicator {
+	display: none; /* fixes https://github.com/ThemeFuse/Unyson/issues/1261 */
+}
+
 /* end copy from: .js .meta-box-sortables .postbox .handlediv */
 
 /* end: Boxes */
@@ -868,7 +889,12 @@ body.rtl .fw-postbox .handlediv:before {
 .fw-backend-option-design-default {
 	position: relative;
 	padding: 24px 27px 21px;
+	border: 0px solid #eeeeee;
 	border-bottom: 1px solid #eeeeee;
+}
+
+.fw-backend-option-design-default.fw-bottom-border-hidden {
+	border-bottom-color: transparent;
 }
 
 .fw-force-xs .fw-backend-option-design-default {
@@ -890,8 +916,7 @@ body.rtl .fw-postbox > .inside > .fw-backend-options-last-border-hider {
 }
 
 .fw-backend-option-design-default > .fw-backend-option-input > .fw-inner,
-.fw-backend-option-design-customizer > .fw-backend-option-input > .fw-inner,
-.fw-backend-option-design-taxonomy > td > .fw-backend-option-input > .fw-inner {
+.fw-backend-option-design-customizer > .fw-backend-option-input > .fw-inner {
 	position: relative;
 	max-width: 100%;
 
@@ -902,15 +927,13 @@ body.rtl .fw-postbox > .inside > .fw-backend-options-last-border-hider {
 
 .fw-backend-option-design-default > .fw-backend-option-input.width-type-fixed > .fw-inner,
 .fw-backend-option-design-customizer > .fw-backend-option-input.width-type-fixed > .fw-inner,
-.fw-backend-option-design-taxonomy > td > .fw-backend-option-input.width-type-fixed > .fw-inner,
 .fw-backend-option-fixed-width {
 	width: 100%;
 	max-width: 428px;
 }
 
 .fw-backend-option-design-default > .fw-backend-option-input.width-type-full > .fw-inner,
-.fw-backend-option-design-customizer > .fw-backend-option-input.width-type-full > .fw-inner,
-.fw-backend-option-design-taxonomy > td > .fw-backend-option-input.width-type-full > .fw-inner {
+.fw-backend-option-design-customizer > .fw-backend-option-input.width-type-full > .fw-inner {
 	width: 100%;
 }
 
@@ -967,15 +990,15 @@ body.rtl .fw-backend-option-design-default > .fw-backend-option-desc > .fw-inner
 
 /* Options Groups */
 
-.fw-backend-options-group {
+.fw-backend-options-group:not(.show-borders) {
 	border-bottom: 1px solid #eeeeee;
 }
 
-.fw-backend-options-group > .fw-backend-option {
+.fw-backend-options-group:not(.show-borders) > .fw-backend-option {
 	border-bottom-width: 0;
 }
 
-.fw-backend-options-group > .fw-backend-option:not(:last-child) {
+.fw-backend-options-group:not(.show-borders) > .fw-backend-option:not(:last-child) {
 	padding-bottom: 0;
 }
 
@@ -1069,14 +1092,12 @@ body.rtl .fw-force-xs .fw-backend-option-design-default.with-help > .fw-backend-
 	color: #333333;
 }
 
-.fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner > .fw-option-help,
-.fw-backend-option-design-taxonomy.with-help > td > .fw-backend-option-input > .fw-inner > .fw-option-help {
+.fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner > .fw-option-help {
 	position: absolute;
 	top: 0;
 	right: 0px;
 }
-body.rtl .fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner > .fw-option-help,
-body.rtl .fw-backend-option-design-taxonomy.with-help > td > .fw-backend-option-input > .fw-inner > .fw-option-help {
+body.rtl .fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner > .fw-option-help {
 	right: auto;
 	left: 0;
 }
@@ -1089,22 +1110,18 @@ body.rtl .fw-backend-option-design-default.with-help > .fw-backend-option-label 
 }
 
 @media (min-width: 783px) {
-	.fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner,
-	.fw-backend-option-design-taxonomy.with-help > td > .fw-backend-option-input > .fw-inner {
+	.fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner {
 		padding-right: 26px;
 	}
-	body.rtl .fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner,
-	body.rtl .fw-backend-option-design-taxonomy.with-help > td > .fw-backend-option-input > .fw-inner {
+	body.rtl .fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner {
 		padding-right: 0;
 		padding-left: 26px;
 	}
 
-	.fw-force-xs .fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner,
-	.fw-force-xs .fw-backend-option-design-taxonomy.with-help > td > .fw-backend-option-input > .fw-inner {
+	.fw-force-xs .fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner {
 		padding-right: 0;
 	}
-	body.rtl .fw-force-xs .fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner,
-	body.rtl .fw-force-xs .fw-backend-option-design-taxonomy.with-help > td > .fw-backend-option-input > .fw-inner {
+	body.rtl .fw-force-xs .fw-backend-option-design-default.with-help > .fw-backend-option-input > .fw-inner {
 		padding-right: inherit;
 		padding-left: 0;
 	}
@@ -1115,31 +1132,177 @@ body.rtl .fw-backend-option-design-default.with-help > .fw-backend-option-label 
 
 /* Edit Term page */
 
-
-#edittag .form-table td {
-	padding: 9px 10px;
+#edittag td.fw-backend-container-content {
+	padding-left: 0;
 }
 
-.fw-backend-option-design-taxonomy input[type=checkbox],
-.fw-backend-option-design-taxonomy input[type=radio] {
+
+#edittag > .fw-backend-option,
+#edittag > .fw-backend-options-group > .fw-backend-option,
+#edittag > .fw-backend-option-type-multi .fw-backend-option,
+#edittag > .fw-backend-option-type-multi-picker .fw-backend-option {
+	padding: 15px 0;
+	border-bottom-width: 0;
+}
+
+@media (min-width: 783px) {
+	#edittag > .fw-backend-option > .fw-backend-option-label,
+	#edittag > .fw-backend-options-group > .fw-backend-option > .fw-backend-option-label,
+	#edittag > .fw-backend-option-type-multi .fw-backend-option > .fw-backend-option-label,
+	#edittag > .fw-backend-option-type-multi-picker .fw-backend-option > .fw-backend-option-label {
+		width: 219px;
+	}
+
+	#edittag > .fw-backend-option > .fw-backend-option-input,
+	#edittag > .fw-backend-options-group > .fw-backend-option > .fw-backend-option-input,
+	#edittag > .fw-backend-option-type-multi .fw-backend-option > .fw-backend-option-input,
+	#edittag > .fw-backend-option-type-multi-picker .fw-backend-option > .fw-backend-option-input {
+		width: calc(100% - 219px);
+	}
+
+	#edittag > .fw-backend-option > .fw-backend-option-desc,
+	#edittag > .fw-backend-options-group > .fw-backend-option > .fw-backend-option-desc,
+	#edittag > .fw-backend-option-type-multi .fw-backend-option > .fw-backend-option-desc {
+		margin-left: 219px;
+	}
+}
+
+#edittag .fw-backend-option input[type=checkbox],
+#edittag .fw-backend-option input[type=radio] {
 	width: auto;
 }
 
 @media (max-width: 782px) {
-	.fw-backend-option-design-taxonomy input[type=checkbox],
-	.fw-backend-option-design-taxonomy input[type=radio] {
+	#edittag .fw-backend-option input[type=checkbox],
+	#edittag .fw-backend-option input[type=radio] {
 		height: 25px;
 		width: 25px;
 	}
-
-	.fw-backend-option-design-taxonomy .fw-backend-option-label .fw-option-help {
-		display: inline-block !important;
-	}
 }
 
-.fw-backend-option-design-taxonomy .description,
-.fw-backend-option-design-taxonomy .fw-backend-option-desc {
-	font-size: 13px;
+#edittag .fw-backend-option .description,
+#edittag .fw-backend-option .fw-backend-option-desc .fw-inner {
+	font-size: 14px;
 }
 
 /* end: Edit Term page */
+
+/* Add Term page */
+
+#addtag .fw-backend-option {
+	padding-left: 0;
+	padding-right: 0;
+}
+
+#addtag .fw-postbox .fw-backend-option {
+	padding-left: 12px;
+	padding-right: 12px;
+}
+
+/* end: Add Term page */
+
+/* modal fix https://github.com/ThemeFuse/Unyson/issues/1353 */
+
+@media (min-width: 1200px) {
+	.media-frame-content .fw-backend-option > .fw-backend-option-label.fw-col-lg-2 {
+		width: 25%;
+	}
+
+	.media-frame-content .fw-backend-option > .fw-backend-option-input.fw-col-lg-10 {
+		width: 75%;
+	}
+
+	.media-frame-content .fw-backend-option > .fw-backend-option-desc.fw-col-lg-offset-2 {
+		margin-left: 25%;
+		width: 75%;
+	}
+}
+
+/* end: modal fix */
+
+/* Add Selectize support for all selects with fw-selectize class */
+
+.fw-selectize.selectize-control.single .selectize-input:before {
+	height: 0;
+	background: none;
+}
+
+.fw-selectize.selectize-control.single .selectize-input:after,
+.fw-selectize.selectize-control.single .selectize-input.dropdown-active:after {
+	right: 8px;
+	margin-top: -2px;
+	border-width: 6px 3px 0 3px;
+	border-color: #000000 transparent transparent transparent;
+}
+
+.fw-selectize.selectize-control > .selectize-input,
+.fw-selectize.selectize-control > .selectize-input.has-items,
+.fw-selectize.selectize-control > .selectize-input.input-active {
+	display: block !important;
+	padding: 0;
+	margin: 1px;
+	border-radius: 0;
+	border: 1px solid #ddd;
+	color: #333333;
+
+	-webkit-box-shadow: inset 0 1px 2px rgba(0,0,0,.07);
+	box-shadow: inset 0 1px 2px rgba(0,0,0,.07);
+}
+
+.fw-selectize.selectize-control > .selectize-input > input {
+	padding: 2px 5px !important;
+	height: auto;
+	font-size: 14px;
+	vertical-align: middle;
+}
+
+.fw-modal .media-frame .fw-selectize.selectize-control > .selectize-input > input {
+	height: 26px;
+}
+
+.fw-selectize.selectize-control .selectize-input > div {
+	vertical-align: middle;
+}
+
+.fw-selectize.selectize-control.single .selectize-input > div {
+	padding: 2px 5px;
+	font-size: 14px;
+}
+
+.fw-modal .media-frame .fw-selectize.selectize-control.single .selectize-input > div {
+	padding: 4px 5px;
+}
+
+.fw-selectize.selectize-control.multi .selectize-input > div {
+	margin: 2px;
+	padding: 0 3px;
+}
+
+.fw-modal .media-frame .fw-selectize.selectize-control.multi .selectize-input > div {
+	padding: 2px 5px;
+}
+
+.fw-selectize.selectize-control .selectize-dropdown {
+	margin: 0 1px;
+	border: none;
+	top: 33px;
+}
+
+.fw-selectize.selectize-control .selectize-dropdown .selectize-dropdown-content {
+	border: 1px solid #ddd;
+	max-height: 204px;
+}
+
+.fw-selectize.selectize-control .selectize-dropdown .selectize-dropdown-content div {
+	height: 30px;
+	background-color: #fff;
+	cursor: pointer;
+	border-bottom: 1px solid #ddd;
+	line-height: 30px;
+}
+
+.fw-selectize.selectize-control .selectize-dropdown .selectize-dropdown-content div:hover {
+	background-color: #f0f0f0;
+}
+
+/* end: Selectize */

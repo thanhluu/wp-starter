@@ -55,10 +55,15 @@ jQuery(document).ready(function ($) {
 					}
 				},
 				update: function(){
-					$(this).closest(optionTypeClass).trigger('change'); // for customizer
+					var optionType = $(this).closest(optionTypeClass);
+
+					optionType.trigger('change'); // for customizer
+
+					fw.options.trigger.changeForEl(optionType);
 				}
 			});
 		},
+
 		/** Init boxes controls */
 		initControls: function ($boxes) {
 			$boxes
@@ -77,6 +82,10 @@ jQuery(document).ready(function ($) {
 							$control.closest('.fw-option-box').remove();
 
 							methods.checkLimit($option);
+							methods.updateHasBoxesClass($option);
+
+							fw.options.trigger.changeForEl($option);
+
 							break;
 						default:
 							// custom control. trigger event for others to handle this
@@ -84,7 +93,7 @@ jQuery(document).ready(function ($) {
 								methods.makeEventName('control:click'), {
 									controlId: controlId,
 									$control: $control,
-									box: methods.getBoxDataForEvent($control.closest('.box'))
+									box: methods.getBoxDataForEvent($control.closest('.fw-option-box'))
 								}
 							);
 					}
@@ -101,6 +110,12 @@ jQuery(document).ready(function ($) {
 			} else {
 				$button.removeClass('fw-hidden');
 			}
+		},
+		updateHasBoxesClass: function($option) {
+			$option[
+				$option.find('> .fw-option-boxes > .fw-option-box:first').length
+				? 'addClass' : 'removeClass'
+			]('has-boxes');
 		}
 	};
 
@@ -114,13 +129,13 @@ jQuery(document).ready(function ($) {
 			try {
 				return _.template(
 					$.trim(template),
-					vars,
+					undefined,
 					{
 						evaluate: /\{\{([\s\S]+?)\}\}/g,
 						interpolate: /\{\{=([\s\S]+?)\}\}/g,
 						escape: /\{\{-([\s\S]+?)\}\}/g
 					}
-				);
+				)(vars);
 			} catch (e) {
 				return '[Template Error] '+ e.message;
 			}
@@ -163,11 +178,14 @@ jQuery(document).ready(function ($) {
 
 				$box.removeClass(titleUpdater.pendingClass);
 
+				var jsonParsedValues = JSON.parse(values) || {};
+
 				$box.find('> .hndle span:not([class])').first().html(
-					this.template(data.template, JSON.parse(values))
+					this.template(data.template, $.extend({}, {o: jsonParsedValues}, jsonParsedValues))
 				);
 
 				delete data;
+				delete jsonParsedValues;
 				this.update();
 				return;
 			}
@@ -191,7 +209,7 @@ jQuery(document).ready(function ($) {
 				var template = '';
 
 				if (response.success) {
-					template = this.template(data.template, response.data.values);
+					template = this.template(data.template, $.extend({}, {o: response.data.values}, response.data.values));
 				} else {
 					template = '[Ajax Error] '+ response.data.message
 				}
@@ -216,6 +234,23 @@ jQuery(document).ready(function ($) {
 
 	fwEvents.on('fw:options:init', function (data) {
 		var $elements = data.$elements.find(optionTypeClass +':not(.fw-option-initialized)');
+
+		$elements.toArray().map(function (el) {
+			fw.options.on.change(function (data) {
+				if (! $(data.context).is(
+					'[data-fw-option-type="addable-box"] .fw-option-boxes > .fw-option-box'
+				)) {
+					return;
+				}
+
+				// Listen to just its own virtual contexts
+				if (! el.contains(data.context)) {
+					return;
+				}
+
+				fw.options.trigger.changeForEl(el);
+			});
+		});
 
 		/** Init Add button */
 		$elements.on('click', '> .fw-option-boxes-controls > .fw-option-boxes-add-button', function(){
@@ -242,6 +277,22 @@ jQuery(document).ready(function ($) {
 
 			$boxes.append($newBox);
 
+			// Re-render wp-editor
+			if (
+				window.fwWpEditorRefreshIds
+				&&
+				$newBox.find('.fw-option-type-wp-editor:first').length
+			) {
+				$newBox.find(
+					'.fw-option-type-wp-editor textarea'
+				).toArray().map(function (textarea) {
+					fwWpEditorRefreshIds(
+						$(textarea).attr('id'),
+						$newBox
+					);
+				});
+			}
+
 			methods.initControls($newBox);
 
 			if ($option.hasClass('is-sortable')) {
@@ -258,6 +309,9 @@ jQuery(document).ready(function ($) {
 			$option.trigger(methods.makeEventName('box:init'), {box: box});
 
 			methods.checkLimit($option);
+			methods.updateHasBoxesClass($option);
+
+			fw.options.trigger.changeForEl($boxes);
 		});
 
 		// close postboxes and attach event listener
@@ -302,4 +356,29 @@ jQuery(document).ready(function ($) {
 
 		titleUpdater.update();
 	});
+
+	fw.options.register('addable-box', {
+		startListeningForChanges: $.noop,
+		getValue: function (optionDescriptor) {
+			var promise = $.Deferred();
+
+			fw.whenAll(
+				$(optionDescriptor.el).find(
+					'.fw-option-boxes'
+				).first().find(
+					'> .fw-option-box.fw-backend-options-virtual-context'
+				).toArray().map(fw.options.getContextValue)
+			).then(function (valuesAsArray) {
+				promise.resolve({
+					value: valuesAsArray.map(function (singleContextValue) {
+						return singleContextValue.value;
+					}),
+
+					optionDescriptor: optionDescriptor
+				})
+			});
+
+			return promise;
+		}
+	})
 });

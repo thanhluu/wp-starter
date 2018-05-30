@@ -1,72 +1,19 @@
 <?php if (!defined('FW')) die('Forbidden');
 /**
- * @var array $options
+ * @see FW_Settings_Form::_form_render()
+ * @var FW_Settings_Form $form
  * @var array $values
- * @var string $focus_tab_input_name
- * @var string $reset_input_name
- * @var bool $ajax_submit
- * @var bool $side_tabs
+ * @var string $input_name_reset
+ * @var string $input_name_save
+ * @var string $js_form_selector Form CSS selector safe to be used in js (js escaped)
+ * @var bool $is_theme_settings Backwards compatibility with old Theme Settings hooks
  */
 ?>
 
-<?php
-if (!function_exists('_action_fw_theme_settings_footer_scripts')):
-
-function _action_fw_theme_settings_footer_scripts() {
-	?>
-	<script type="text/javascript">
-		(function ($) {
-			var fwLoadingId = 'fw-theme-settings';
-
-			{
-				fw.loading.show(fwLoadingId);
-
-				fwEvents.one('fw:options:init', function (data) {
-					fw.loading.hide(fwLoadingId);
-				});
-			}
-
-			$(function ($) {
-				$(document.body).on({
-					'fw:settings-form:before-html-reset': function () {
-						fw.loading.show(fwLoadingId);
-					},
-					'fw:settings-form:reset': function () {
-						fw.loading.hide(fwLoadingId);
-					}
-				});
-			});
-		})(jQuery);
-	</script>
-<?php
-}
-add_action('admin_print_footer_scripts', '_action_fw_theme_settings_footer_scripts', 20);
-
-endif;
-
-$texts = apply_filters('fw_settings_form_texts', array(
-	'save_button' => __('Save Changes', 'fw'),
-	'reset_button' => __('Reset Options', 'fw'),
-));
-?>
-
-<?php if ($side_tabs): ?>
+<?php if ($form->get_is_side_tabs()): ?>
 	<div class="fw-settings-form-header fw-row">
 		<div class="fw-col-xs-12 fw-col-sm-6">
-			<h2><?php echo fw()->theme->manifest->get_name() ?>
-				<?php if (fw()->theme->manifest->get('author')): ?>
-					<?php
-					if (fw()->theme->manifest->get('author_uri')) {
-						echo fw_html_tag('a', array(
-							'href' => fw()->theme->manifest->get('author_uri'),
-							'target' => '_blank'
-						), '<small>'. __('by', 'fw') .' '. fw()->theme->manifest->get('author') .'</small>');
-					} else {
-						echo '<small>'. fw()->theme->manifest->get('author') .'</small>';
-					}
-					?>
-				<?php endif; ?>
-			</h2>
+			<h2><?php echo $form->get_string('title'); ?></h2>
 		</div>
 		<div class="fw-col-xs-12 fw-col-sm-6">
 			<div class="form-header-buttons">
@@ -80,27 +27,32 @@ $texts = apply_filters('fw_settings_form_texts', array(
 
 				echo fw_html_tag('input', array(
 					'type' => 'submit',
-					'name' => '_fw_save_options',
+					'name' => $input_name_save,
 					'class' => 'fw-hidden',
 				));
 				?>
 				<?php
 				echo implode(
 					'<i class="submit-button-separator"></i>',
-					apply_filters('fw_settings_form_header_buttons', array(
-						fw_html_tag('input', array(
-							'type' => 'submit',
-							'name' => '_fw_reset_options',
-							'value' => $texts['reset_button'],
-							'class' => 'button-secondary button-large submit-button-reset',
-						)),
-						fw_html_tag('input', array(
-							'type' => 'submit',
-							'name' => '_fw_save_options',
-							'value' => $texts['save_button'],
-							'class' => 'button-primary button-large submit-button-save',
-						))
-					))
+					apply_filters(
+						$is_theme_settings
+							? 'fw_settings_form_header_buttons'
+							: 'fw:settings-form:'. $form->get_id() .':side-tabs:header-buttons',
+						array(
+							fw_html_tag('input', array(
+								'type' => 'submit',
+								'name' => $input_name_reset,
+								'value' => $form->get_string('reset_button'),
+								'class' => 'button-secondary button-large submit-button-reset fw-settings-form-reset-btn',
+							)),
+							fw_html_tag('input', array(
+								'type' => 'submit',
+								'name' => $input_name_save,
+								'value' => $form->get_string('save_button'),
+								'class' => 'button-primary button-large submit-button-save',
+							))
+						)
+					)
 				);
 				?>
 			</div>
@@ -108,93 +60,80 @@ $texts = apply_filters('fw_settings_form_texts', array(
 	</div>
 	<script type="text/javascript">
 		jQuery(function($){
-			fwEvents.on('fw:options:init', function(data){
-				data.$elements.find('.fw-settings-form-header:not(.initialized)').addClass('initialized');
+			fwEvents.one('fw:options:init', function(data){
+				$('<?php echo $js_form_selector ?>').on(
+					'fw:settings-form:reset fw:settings-form:init-header',
+					function(){
+						$(this).find('.fw-settings-form-header:not(.initialized)').addClass('initialized');
+					}
+				).trigger('fw:settings-form:init-header');
 			});
 		});
 	</script>
 <?php endif; ?>
 
-<?php echo fw()->backend->render_options($options, $values); ?>
+<?php echo fw()->backend->render_options($form->get_options(), $values); ?>
 
 <div class="form-footer-buttons">
 <!-- This div is required to follow after options in order to have special styles in case options will contain tabs (css adjacent selector + ) -->
 <?php echo implode(
-	$side_tabs ? ' ' : ' &nbsp;&nbsp; ',
-	apply_filters('fw_settings_form_footer_buttons', array(
-		fw_html_tag('input', array(
-			'type' => 'submit',
-			'name' => '_fw_save_options',
-			'value' => $texts['save_button'],
-			'class' => 'button-primary button-large',
-		)),
-		fw_html_tag('input', array(
-			'type' => 'submit',
-			'name' => '_fw_reset_options',
-			'value' => $texts['reset_button'],
-			'class' => 'button-secondary button-large',
-		))
-	))
+	$form->get_is_side_tabs() ? ' ' : ' &nbsp;&nbsp; ',
+	apply_filters(
+		$is_theme_settings
+			? 'fw_settings_form_footer_buttons'
+			: 'fw:settings-form:'. $form->get_id() .':side-tabs:footer-buttons',
+		array(
+			fw_html_tag('input', array(
+				'type' => 'submit',
+				'name' => $input_name_save,
+				'value' => $form->get_string('save_button'),
+				'class' => 'button-primary button-large',
+			)),
+			fw_html_tag('input', array(
+				'type' => 'submit',
+				'name' => $input_name_reset,
+				'value' => $form->get_string('reset_button'),
+				'class' => 'button-secondary button-large fw-settings-form-reset-btn',
+			))
+		)
+	)
 ); ?>
 </div>
 
-<!-- focus tab -->
-<?php
-$focus_tab_id = trim( FW_Request::POST($focus_tab_input_name, FW_Request::GET($focus_tab_input_name, '')) );
-echo fw_html_tag('input', array(
-	'type'  => 'hidden',
-	'name'  => $focus_tab_input_name,
-	'value' => $focus_tab_id,
-));
-?>
-<script type="text/javascript">
-jQuery(function($){
-	fwEvents.one("fw:options:init", function(){
-		var $form = $('form[data-fw-form-id="fw_settings"]:first');
-
-		$form.on("click", ".fw-options-tabs-wrapper > .fw-options-tabs-list > ul > li > a", function(){
-			$form.find("input[name='<?php echo esc_js($focus_tab_input_name); ?>']").val(
-				$(this).attr("href").replace(/^#/, "") // tab id
-			);
-		});
-
-		/* "wait" after tabs initialized */
-		setTimeout(function(){
-			fwBackendOptions.openTab($.trim("<?php echo esc_js($focus_tab_id) ?>"));
-		}, 200);
-	});
-});
-</script>
-<!-- end: focus tab -->
-
 <!-- reset warning -->
 <script type="text/javascript">
-	jQuery(function($){
-		$(document.body).on('click.fw-reset-warning', 'form[data-fw-form-id="fw_settings"] input[name="<?php echo esc_js($reset_input_name) ?>"]', function(e){
-			/**
-			 * on confirm() the submit input looses focus
-			 * fwForm.isAdminPage() must be able to select the input to send it in _POST
-			 * so use alternative solution http://stackoverflow.com/a/5721762
-			 */
-			{
-				$(this).closest('form').find('[clicked]:submit').removeAttr('clicked');
-				$(this).attr('clicked', '');
-			}
+	jQuery( function ( $ ) {
+		$( document.body ).on(
+			'click.fw-settings-form-reset-warning',
+			'<?php echo $js_form_selector ?> input[name="<?php echo esc_js( $input_name_reset ) ?>"]',
+			function ( e ) {
+				/**
+				 * on confirm() the submit input looses focus
+				 * fwForm.isAdminPage() must be able to select the input to send it in _POST
+				 * so use alternative solution http://stackoverflow.com/a/5721762
+				 */
+				$( this ).closest( 'form' ).find( '[clicked]:submit' ).removeAttr( 'clicked' );
+				$( this ).attr( 'clicked', '' );
 
-			if (!confirm('<?php
-				echo esc_js(__("Click OK to reset.\nAll settings will be lost and replaced with default settings!", 'fw'))
-			?>')) {
-				e.preventDefault();
-				$(this).removeAttr('clicked');
+				var resetWarning = '<?php echo esc_js( $form->get_string( 'reset_warning' ) ); ?>',
+					data         = { 'reset_warning': resetWarning };
+
+				if ( ! confirm( resetWarning ) ) {
+					e.preventDefault();
+					$( document.body ).trigger( 'fw:settings-form:cancel-reset', data );
+					$( this ).removeAttr( 'clicked' );
+				} else {
+					$( document.body ).trigger( 'fw:settings-form:before-reset', data );
+				}
 			}
-		});
-	});
+		);
+	} );
 </script>
 <!-- end: reset warning -->
 
 <script type="text/javascript">
 	jQuery(function($){
-		var $form = $('form[data-fw-form-id="fw_settings"]:first'),
+		var $form = $('<?php echo $js_form_selector ?>:first'),
 			timeoutId = 0;
 
 		$form.on('change.fw_settings_form_delayed_change', function(){
@@ -209,18 +148,26 @@ jQuery(function($){
 	});
 </script>
 
-<?php if ($ajax_submit): ?>
+<?php if ($form->get_is_ajax_submit()): ?>
 <!-- ajax submit -->
 <div id="fw-settings-form-ajax-save-extra-message"
-     data-html="<?php echo fw_htmlspecialchars(apply_filters('fw_settings_form_ajax_save_loading_extra_message', '')) ?>"></div>
+     data-html="<?php echo fw_htmlspecialchars(apply_filters(
+		$is_theme_settings
+			? 'fw_settings_form_ajax_save_loading_extra_message'
+			: 'fw:settings-form:'. $form->get_id() .':ajax-submit:extra-message',
+		''
+     )) ?>"></div>
 <script type="text/javascript">
 	jQuery(function ($) {
 		function isReset($submitButton) {
-			return $submitButton.length && $submitButton.attr('name') == '<?php echo esc_js($reset_input_name) ?>';
+			return $submitButton.length && $submitButton.attr('name') == '<?php echo esc_js($input_name_reset) ?>';
 		}
 
-		var formSelector = 'form[data-fw-form-id="fw_settings"]',
-			loadingExtraMessage = $('#fw-settings-form-ajax-save-extra-message').attr('data-html');
+		var formSelector = '<?php echo $js_form_selector ?>',
+			loadingExtraMessage = $('#fw-settings-form-ajax-save-extra-message').attr('data-html'),
+			loadingModalId = 'fw-options-ajax-save-loading';
+
+		$(formSelector).addClass('prevent-all-tabs-init'); // fixes https://github.com/ThemeFuse/Unyson/issues/1491
 
 		fwForm.initAjaxSubmit({
 			selector: formSelector,
@@ -243,9 +190,9 @@ jQuery(function($){
 					}
 
 					fw.soleModal.show(
-						'fw-options-ajax-save-loading',
+						loadingModalId,
 						'<h2 class="fw-text-muted">'+
-							'<img src="'+ fw.img.loadingSpinner +'" alt="Loading" class="wp-spinner" /> '+
+							'<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAAAAACo4kLRAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAAAnRSTlMA/1uRIrUAAAACYktHRADdUu+NWwAAAAd0SU1FB+EKCgYABDchIukAAACZelRYdFJhdyBwcm9maWxlIHR5cGUgZ2lmOnhtcCBkYXRheG1wAAAImU2NMQ5CMQxD957iHyGNnaTlNkVtEQMSAwPHJx8WHMleXuxyu+/L+/E85niNzHJ85b1gRwvx6vCrWxCGBkdNF1WVaD5DODkx2H0Fgkmv5I2dxFQ9mRKiy3seMdBZCZ4lnUqjQYj/GRW3LPm95w42VvkACzYml9QYNjwAAACjSURBVBjTfZChDoNAEETfbZpgVqJPXHIO0w+hCZYPxJKUD6mpIzmBPrmmigoQcCSM2eRlszM7buWqxzbSd8Y0NgEAtwJ5WvYd39Y7TKOB7xkW0C6AQB4N6KuqB2zMIDDZ0cQmENJ2b8i/AYAl4db3pwj0fAlzmXJGsBIagl4/kitShFjCiNCUsEEI/sx8QKA9WWkLAnV3oNrVN9VtJZtyKrnUH9vgMmhlXVedAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDE3LTEwLTEwVDA2OjAwOjA0LTA3OjAw4kWx4AAAACV0RVh0ZGF0ZTptb2RpZnkAMjAxNy0xMC0xMFQwNjowMDowNC0wNzowMJMYCVwAAAAASUVORK5CYII=" alt="Loading" class="wp-spinner" /> '+
 							title +
 						'</h2>'+
 						'<p class="fw-text-muted"><em>'+ description +'</em></p>'+ loadingExtraMessage,
@@ -254,12 +201,25 @@ jQuery(function($){
 							allowClose: false
 						}
 					);
+
+					return 500; // fixes https://github.com/ThemeFuse/Unyson/issues/1491
 				} else {
-					// fw.soleModal.hide('fw-options-ajax-save-loading'); // we need to show loading until the form reset ajax will finish
+					// fw.soleModal.hide(loadingModalId); // we need to show loading until the form reset ajax will finish
 				}
 			},
-			onErrors: function() {
-				fw.soleModal.hide('fw-options-ajax-save-loading');
+			afterSubmitDelay: function (elements) {
+				fwEvents.trigger('fw:options:init:tabs', {$elements: elements.$form});
+			},
+			onErrors: function( elements, data ) {
+				var message = $.map( data.errors, function( mssg ) { return '<p class="fw-text-danger">' + mssg + '</p>' } ) + fw.soleModal.renderFlashMessages( data.flash_messages );
+
+				fw.soleModal.hide( loadingModalId );
+
+				fw.soleModal.show(
+					'fw-options-ajax-save-error',
+					'<p class="fw-text-danger">' + message + '</p>'
+				);
+
 			},
 			onAjaxError: function(elements, data) {
 				{
@@ -270,7 +230,7 @@ jQuery(function($){
 					}
 				}
 
-				fw.soleModal.hide('fw-options-ajax-save-loading');
+				fw.soleModal.hide(loadingModalId);
 				fw.soleModal.show(
 					'fw-options-ajax-save-error',
 					'<p class="fw-text-danger">'+ message +'</p>'
@@ -280,6 +240,7 @@ jQuery(function($){
 				/**
 				 * Display messages
 				 */
+
 				do {
 					/**
 					 * Don't display the "Settings successfully saved" message
@@ -302,17 +263,26 @@ jQuery(function($){
 
 					var noErrors = _.isEmpty(ajaxData.flash_messages.error) && _.isEmpty(ajaxData.flash_messages.warning);
 
-					fw.soleModal.show(
-						'fw-options-ajax-save-success',
-						'<div style="margin: 0 35px;">'+ fw.soleModal.renderFlashMessages(ajaxData.flash_messages) +'</div>',
-						{
-							autoHide: noErrors
-								? 1000 // hide fast the message if everything went fine
-								: 10000,
-							showCloseButton: false,
-							hidePrevious: noErrors ? false : true // close and open popup when there are errors
-						}
-					);
+					// remove success messages, do not make user wait
+					ajaxData.flash_messages = _.omit(ajaxData.flash_messages, 'success');
+
+					var modalHtml = fw.soleModal.renderFlashMessages(ajaxData.flash_messages);
+
+					if (modalHtml.length) {
+						fw.soleModal.show(
+							'fw-options-ajax-save-success',
+							'<div style="margin: 0 35px;">' + modalHtml + '</div>',
+							{
+								autoHide: noErrors
+									? 1000 // hide fast the message if everything went fine
+									: 10000,
+								showCloseButton: false,
+								hidePrevious: noErrors ? false : true // close and open popup when there are errors
+							}
+						);
+					} else {
+						fw.soleModal.hide('fw-options-ajax-save-success');
+					}
 				} while(false);
 
 				/**
@@ -323,7 +293,7 @@ jQuery(function($){
 						type: "GET",
 						dataType: 'text'
 					}).done(function(html){
-						fw.soleModal.hide('fw-options-ajax-save-loading');
+						fw.soleModal.hide(loadingModalId);
 
 						var $form = jQuery(formSelector, html);
 						html = undefined; // not needed anymore
@@ -338,9 +308,9 @@ jQuery(function($){
 							elements.$form.css('transition', 'opacity ease .3s');
 							elements.$form.css('opacity', '0');
 							elements.$form.trigger('fw:settings-form:before-html-reset');
+							fwEvents.trigger('fw:options:teardown', {$elements: elements.$form});
 
 							setTimeout(function() {
-								var focusTabId = elements.$form.find("input[name='<?php echo esc_js($focus_tab_input_name); ?>']").val();
 								var scrollTop = jQuery(window).scrollTop();
 
 								// replace form html
@@ -359,8 +329,6 @@ jQuery(function($){
 
 								fwEvents.trigger('fw:options:init', {$elements: elements.$form});
 
-								fwBackendOptions.openTab(focusTabId);
-
 								jQuery(window).scrollTop(scrollTop);
 
 								// fadeIn
@@ -376,7 +344,7 @@ jQuery(function($){
 							}, 300);
 						}, 300);
 					}).fail(function(jqXHR, textStatus, errorThrown){
-						fw.soleModal.hide('fw-options-ajax-save-loading');
+						fw.soleModal.hide(loadingModalId);
 						elements.$form.css({
 							'opacity': '',
 							'transition': '',
@@ -386,7 +354,7 @@ jQuery(function($){
 						alert('Ajax error (more details in console)');
 					});
 				} else {
-					fw.soleModal.hide('fw-options-ajax-save-loading');
+					fw.soleModal.hide(loadingModalId);
 					elements.$form.trigger('fw:settings-form:saved');
 				}
 			}
@@ -396,7 +364,16 @@ jQuery(function($){
 <!-- end: ajax submit -->
 <?php endif; ?>
 
-<?php if ($side_tabs && apply_filters('fw:settings-form:side-tabs:open-all-boxes', true)): ?>
+<?php if (
+	$form->get_is_side_tabs()
+	&&
+	apply_filters(
+		$is_theme_settings
+		? 'fw:settings-form:side-tabs:open-all-boxes'
+		: 'fw:settings-form:'. $form->get_id() .':side-tabs:open-all-boxes',
+		true
+	)
+): ?>
 <!-- open all postboxes -->
 <script type="text/javascript">
 	jQuery(function ($) {
@@ -407,11 +384,30 @@ jQuery(function($){
 			clearTimeout(execTimeoutId);
 			execTimeoutId = setTimeout(function(){
 				// undo not first boxes auto close
-				data.$elements.find('.fw-backend-postboxes > .fw-postbox:not(:first-child)').removeClass('closed');
+				data.$elements.find(
+					'<?php echo $js_form_selector ?> .fw-backend-postboxes > .fw-postbox:not(:first-child)'
+				).removeClass('closed');
 			}, 10);
 		});
 	});
 </script>
 <?php endif; ?>
 
-<?php do_action('fw_settings_form_footer'); ?>
+<?php if (!empty($_GET['_focus_tab'])): ?>
+<script type="text/javascript">
+	jQuery(function($){
+		fwEvents.one('fw:options:init', function(){
+			setTimeout(function(){
+				$('<?php echo $js_form_selector ?> a[href="#<?php echo esc_js($_GET['_focus_tab']); ?>"]')
+					.trigger('click');
+			}, 90);
+		});
+	});
+</script>
+<?php endif; ?>
+
+<?php do_action(
+	$is_theme_settings
+		? 'fw_settings_form_footer'
+		: 'fw:settings-form:'. $form->get_id() .':footer'
+); ?>

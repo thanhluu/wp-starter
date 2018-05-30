@@ -12,6 +12,10 @@ class FW_Option_Type_Hidden extends FW_Option_Type {
 		return 'hidden';
 	}
 
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
+	}
+
 	/**
 	 * @internal
 	 * {@inheritdoc}
@@ -63,8 +67,6 @@ class FW_Option_Type_Hidden extends FW_Option_Type {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Hidden' );
-
 class FW_Option_Type_Text extends FW_Option_Type {
 	public function get_type() {
 		return 'text';
@@ -75,6 +77,10 @@ class FW_Option_Type_Text extends FW_Option_Type {
 	 * {@inheritdoc}
 	 */
 	protected function _enqueue_static( $id, $option, $data ) {
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -114,11 +120,13 @@ class FW_Option_Type_Text extends FW_Option_Type {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Text' );
-
 class FW_Option_Type_Short_Text extends FW_Option_Type_Text {
 	public function get_type() {
 		return 'short-text';
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -145,8 +153,6 @@ class FW_Option_Type_Short_Text extends FW_Option_Type_Text {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Short_Text' );
-
 class FW_Option_Type_Password extends FW_Option_Type {
 	public function get_type() {
 		return 'password';
@@ -157,6 +163,10 @@ class FW_Option_Type_Password extends FW_Option_Type {
 	 * {@inheritdoc}
 	 */
 	protected function _enqueue_static( $id, $option, $data ) {
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -196,8 +206,6 @@ class FW_Option_Type_Password extends FW_Option_Type {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Password' );
-
 class FW_Option_Type_Textarea extends FW_Option_Type {
 	public function get_type() {
 		return 'textarea';
@@ -208,6 +216,10 @@ class FW_Option_Type_Textarea extends FW_Option_Type {
 	 * {@inheritdoc}
 	 */
 	protected function _enqueue_static( $id, $option, $data ) {
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -254,8 +266,6 @@ class FW_Option_Type_Textarea extends FW_Option_Type {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Textarea' );
-
 class FW_Option_Type_Html extends FW_Option_Type {
 	public function get_type() {
 		return 'html';
@@ -266,6 +276,10 @@ class FW_Option_Type_Html extends FW_Option_Type {
 	 * {@inheritdoc}
 	 */
 	protected function _enqueue_static( $id, $option, $data ) {
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -330,8 +344,6 @@ class FW_Option_Type_Html extends FW_Option_Type {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Html' );
-
 /**
  * Same html but displayed in fixed width
  */
@@ -347,8 +359,6 @@ class FW_Option_Type_Html_Fixed extends FW_Option_Type_Html {
 		return 'fixed';
 	}
 }
-
-FW_Option_Type::register( 'FW_Option_Type_Html_Fixed' );
 
 /**
  * Same html but displayed in full width
@@ -366,7 +376,6 @@ class FW_Option_Type_Html_Full extends FW_Option_Type_Html {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Html_Full' );
 
 class FW_Option_Type_Checkbox extends FW_Option_Type {
 	public function get_type() {
@@ -378,6 +387,10 @@ class FW_Option_Type_Checkbox extends FW_Option_Type {
 	 * {@inheritdoc}
 	 */
 	protected function _enqueue_static( $id, $option, $data ) {
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -456,8 +469,6 @@ class FW_Option_Type_Checkbox extends FW_Option_Type {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Checkbox' );
-
 /**
  * Checkboxes list
  */
@@ -471,6 +482,10 @@ class FW_Option_Type_Checkboxes extends FW_Option_Type {
 	 * {@inheritdoc}
 	 */
 	protected function _enqueue_static( $id, $option, $data ) {
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -498,20 +513,34 @@ class FW_Option_Type_Checkboxes extends FW_Option_Type {
 		$html .= '<input type="checkbox" name="' . esc_attr( $option['attr']['name'] ) . '[]" value="" checked="checked" style="display: none">' .
 		         '<!-- used for "' . esc_attr( $id ) . '" to be present in _POST -->';
 
-		foreach ( $option['choices'] as $value => $text ) {
-			$choice_id = $option['attr']['id'] . '-' . $value;
+		foreach ( $option['choices'] as $value => $choice ) {
+			if (is_string($choice)) {
+				$choice = array(
+					'text' => $choice,
+					'attr' => array(),
+				);
+			}
+
+			$choice['attr'] = array_merge(
+				isset($choice['attr']) ? $choice['attr'] : array(),
+				array(
+					'type' => 'checkbox',
+					'name' => $option['attr']['name'] . '[' . $value . ']',
+					'value' => 'true',
+					'id' => $option['attr']['id'] . '-' . $value,
+					'data-fw-checkbox-id' => $value
+				),
+				isset( $option['value'][ $value ] ) && $option['value'][ $value ]
+					? array('checked' => 'checked') : array()
+			);
 
 			$html .=
-			'<div>' .
-				'<label for="' . esc_attr( $choice_id ) . '">' .
-					'<input type="checkbox" ' .
-						'name="' . esc_attr( $option['attr']['name'] ) . '[' . esc_attr( $value ) . ']" ' .
-						'value="true" ' .
-						'id="' . esc_attr( $choice_id ) . '" ' .
-						( isset( $option['value'][ $value ] ) && $option['value'][ $value ] ? 'checked="checked" ' : '' ) .
-						'> ' . htmlspecialchars( $text, ENT_COMPAT, 'UTF-8' ) .
-				'</label>' .
-			'</div>';
+				'<div>' .
+					'<label for="' . esc_attr( $choice['attr']['id'] ) . '">' .
+						'<input  ' . fw_attr_to_html($choice['attr']) . '>' .
+						' ' . htmlspecialchars( $choice['text'], ENT_COMPAT, 'UTF-8' ) .
+					'</label>' .
+				'</div>';
 		}
 
 		$html .= '</div>';
@@ -540,7 +569,7 @@ class FW_Option_Type_Checkboxes extends FW_Option_Type {
 					continue;
 				}
 
-				$value[ $choice ] = true;
+				$value[$choice] = true;
 			}
 		} else {
 			$value = $option['value'];
@@ -575,8 +604,6 @@ class FW_Option_Type_Checkboxes extends FW_Option_Type {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Checkboxes' );
-
 /**
  * Radio list
  */
@@ -590,6 +617,10 @@ class FW_Option_Type_Radio extends FW_Option_Type {
 	 * {@inheritdoc}
 	 */
 	protected function _enqueue_static( $id, $option, $data ) {
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -614,18 +645,30 @@ class FW_Option_Type_Radio extends FW_Option_Type {
 
 		$html = '<div ' . fw_attr_to_html( $div_attr ) . '>';
 
-		foreach ( $option['choices'] as $value => $text ) {
-			$choice_id = $option['attr']['id'] . '-' . $value;
+		foreach ( $option['choices'] as $value => $choice ) {
+			if (is_string($choice)) {
+				$choice = array(
+					'text' => $choice,
+					'attr' => array(),
+				);
+			}
+
+			$choice['attr'] = array_merge(
+				isset($choice['attr']) ? $choice['attr'] : array(),
+				array(
+					'type' => 'radio',
+					'name' => $option['attr']['name'],
+					'value' => $value,
+					'id' => $option['attr']['id'] . '-' . $value,
+				),
+				$option['value'] == $value ? array('checked' => 'checked') : array()
+			);
 
 			$html .=
 			'<div>' .
-				'<label for="' . esc_attr( $choice_id ) . '">' .
-					'<input type="radio" ' .
-						'name="' . esc_attr( $option['attr']['name'] ) . '" ' .
-						'value="' . esc_attr( $value ) . '" ' .
-						'id="' . esc_attr( $choice_id ) . '" ' .
-						( $option['value'] == $value ? 'checked="checked" ' : '' ) .
-						'> ' . htmlspecialchars( $text, ENT_COMPAT, 'UTF-8' ) .
+				'<label for="' . esc_attr( $choice['attr']['id'] ) . '">' .
+					'<input  ' . fw_attr_to_html($choice['attr']) . '>' .
+					' ' . htmlspecialchars( $choice['text'], ENT_COMPAT, 'UTF-8' ) .
 				'</label>' .
 			'</div>';
 		}
@@ -683,8 +726,6 @@ class FW_Option_Type_Radio extends FW_Option_Type {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Radio' );
-
 /**
  * Select
  */
@@ -698,6 +739,10 @@ class FW_Option_Type_Select extends FW_Option_Type {
 	 * {@inheritdoc}
 	 */
 	protected function _enqueue_static( $id, $option, $data ) {
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -787,7 +832,7 @@ class FW_Option_Type_Select extends FW_Option_Type {
 		return $result;
 	}
 
-	protected function render_choices( &$choices, &$value ) {
+	protected function render_choices( $choices, $value ) {
 		if ( empty( $choices ) || ! is_array( $choices ) ) {
 			return '';
 		}
@@ -801,24 +846,25 @@ class FW_Option_Type_Select extends FW_Option_Type {
 				}
 
 				if ( isset( $choice['choices'] ) ) { // optgroup
-					$html .= '<optgroup ' . fw_attr_to_html( $choice['attr'] ) . '>' .
-					         $this->render_choices( $choice['choices'], $value ) .
-					         '</optgroup>';
+					$html .=
+						'<optgroup ' . fw_attr_to_html( $choice['attr'] ) . '>' .
+							$this->render_choices( $choice['choices'], $value ) .
+						'</optgroup>';
 				} else { // choice as array (with custom attributes)
 					$choice['attr']['value'] = $c_value;
 
 					unset( $choice['attr']['selected'] ); // this is not allowed
 
-					$html .= '<option ' . fw_attr_to_html( $choice['attr'] ) . ' ' .
-					         ( $c_value == $value ? 'selected="selected" ' : '' ) . '>' .
-					         htmlspecialchars( isset( $choice['text'] ) ? $choice['text'] : '', ENT_COMPAT, 'UTF-8' ) .
-					         '</option>';
+					$html .=
+						'<option ' . fw_attr_to_html( $choice['attr'] ) . selected( $c_value, $value, false ) . '>' .
+							htmlspecialchars( isset( $choice['text'] ) ? $choice['text'] : '', ENT_COMPAT, 'UTF-8' ) .
+						'</option>';
 				}
 			} else { // simple choice
-				$html .= '<option value="' . esc_attr( $c_value ) . '" ' .
-				         ( $c_value == $value ? 'selected="selected" ' : '' ) . '>' .
-				         htmlspecialchars( $choice, ENT_COMPAT, 'UTF-8' ) .
-				         '</option>';
+				$html .=
+					'<option value="' . esc_attr( $c_value ) . '"' . selected( $c_value, $value, false ) . '>' .
+						htmlspecialchars( $choice, ENT_COMPAT, 'UTF-8' ) .
+					'</option>';
 			}
 		}
 
@@ -835,8 +881,6 @@ class FW_Option_Type_Select extends FW_Option_Type {
 		);
 	}
 }
-
-FW_Option_Type::register( 'FW_Option_Type_Select' );
 
 class FW_Option_Type_Short_Select extends FW_Option_Type_Select {
 	public function get_type() {
@@ -866,8 +910,6 @@ class FW_Option_Type_Short_Select extends FW_Option_Type_Select {
 		return 'auto';
 	}
 }
-
-FW_Option_Type::register( 'FW_Option_Type_Short_Select' );
 
 /**
  * Select Multiple
@@ -946,7 +988,7 @@ class FW_Option_Type_Select_Multiple extends FW_Option_Type_Select {
 		return $input_value;
 	}
 
-	protected function render_choices( &$choices, &$value ) {
+	protected function render_choices( $choices, $value ) {
 		if ( empty( $choices ) || ! is_array( $choices ) ) {
 			return '';
 		}
@@ -995,16 +1037,17 @@ class FW_Option_Type_Select_Multiple extends FW_Option_Type_Select {
 	}
 }
 
-FW_Option_Type::register( 'FW_Option_Type_Select_Multiple' );
-
-
-class FW_Option_Type_Unique extends FW_Option_Type
-{
-	private static $ids = array();
+class FW_Option_Type_Unique extends FW_Option_Type {
+	public static $cache_key = 'fw:option-type:unique_id:ids';
+	private static $should_do_regeneration = true;
 
 	public function get_type()
 	{
 		return 'unique';
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	protected function _get_defaults()
@@ -1063,11 +1106,23 @@ class FW_Option_Type_Unique extends FW_Option_Type
 			$original_id = $post_id;
 		}
 
-		self::$ids[$post_id] = array();
-		self::$ids[$original_id] = array();
+		$ids = $this->get_loaded_ids();
+
+		if ( isset( $ids[ $post_id ] ) ) {
+			FW_Cache::set( self::$cache_key . '/' . $post_id, $ids );
+		}
+
+		if ( isset( $ids[ $original_id ] ) ) {
+			FW_Cache::set( self::$cache_key . '/' . $original_id, $ids );
+		}
+	}
+
+	public function set_should_do_regeneration($new) {
+		self::$should_do_regeneration = $new;
 	}
 
 	protected function _get_value_from_input($option, $input_value) {
+
 		if (is_null($input_value)) {
 			$id = empty($option['value']) ? $this->generate_id($option['length']) : $option['value'];
 		} else {
@@ -1080,8 +1135,14 @@ class FW_Option_Type_Unique extends FW_Option_Type
 
 		/**
 		 * Regenerate if found the same id again
+		 *
+		 * Sometimes you don't need to to regeneration of ids.
+		 * You can use set_should_do_regeneration() method in order to skip
+		 * this step. You really should use this hook only if you know what
+		 * you're doing. You can really break some things around without
+		 * proper care.
 		 */
-		{
+		if (self::$should_do_regeneration) {
 			global $post;
 
 			if ($post) {
@@ -1090,18 +1151,33 @@ class FW_Option_Type_Unique extends FW_Option_Type
 				$post_id = '~';
 			}
 
-			if (!isset(self::$ids[$post_id])) {
-				self::$ids[$post_id] = array();
+			$ids = $this->get_loaded_ids();
+
+			if ( ! isset( $ids[ $post_id ] ) ) {
+				$ids[ $post_id ] = array();
 			}
 
-			while (isset(self::$ids[$post_id][$id])) {
-				$id = $this->generate_id($option['length']);
+			while ( isset( $ids[ $post_id ][ $id ] ) ) {
+				$id = $this->generate_id( $option['length'] );
 			}
 
-			self::$ids[$post_id][$id] = true;
+			$ids[ $post_id ][ $id ] = true;
+
+			FW_Cache::set( self::$cache_key, $ids );
 		}
 
 		return $id;
+	}
+
+	public function get_loaded_ids() {
+		try {
+			return FW_Cache::get( $cache_key = 'fw:option-type:unique_id:ids' );
+		} catch (FW_Cache_Not_Found_Exception $e) {
+
+			FW_Cache::set( $cache_key, array() );
+
+			return array();
+		}
 	}
 
 	/**
@@ -1142,4 +1218,59 @@ class FW_Option_Type_Unique extends FW_Option_Type
 		return $value;
 	}
 }
-FW_Option_Type::register('FW_Option_Type_Unique');
+
+/**
+ * Input for Google Maps API Key which is stored in a wp_option
+ * @since 2.5.7
+ */
+class FW_Option_Type_GMap_Key extends FW_Option_Type_Text {
+
+	private static $original_value = null;
+
+	/**
+	 * Returns wp_options key where the key is stored
+	 *
+	 * @return string
+	 */
+	public static function get_key_option_id() {
+		return 'fw-option-types:gmap-key';
+	}
+
+	public static function get_key() {
+		return (string) get_option( self::get_key_option_id() );
+	}
+
+	public function _init() {
+		if ( is_null( self::$original_value ) ) {
+			self::$original_value = self::get_key();
+		}
+	}
+
+	public function get_type() {
+		return 'gmap-key';
+	}
+
+	/**
+	 * @internal
+	 */
+	protected function _get_defaults() {
+		return array(
+			'value'      => self::get_key(),
+			'fw-storage' => array(
+				'type'      => 'wp-option',
+				'wp-option' => self::get_key_option_id(),
+			),
+		);
+	}
+
+	/**
+	 * Restrict option save if the option value is same as the one in the database
+	 * @inheritdoc
+	 */
+	protected function _storage_save( $id, array $option, $value, array $params ) {
+		if ( $value == self::$original_value ) {
+			return $value;
+		}
+		return parent::_storage_save( $id, $option, $value, $params );
+	}
+}

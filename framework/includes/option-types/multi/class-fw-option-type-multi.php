@@ -16,12 +16,18 @@ class FW_Option_Type_Multi extends FW_Option_Type
 	 */
 	protected function _enqueue_static($id, $option, $data)
 	{
-		wp_enqueue_style(
-			'fw-option-'. $this->get_type(),
-			fw_get_framework_directory_uri('/includes/option-types/'. $this->get_type() .'/static/css/styles.css'),
-			array(),
-			fw()->manifest->get_version()
-		);
+		static $enqueue = true;
+
+		if ($enqueue) {
+			wp_enqueue_style(
+				'fw-option-'. $this->get_type(),
+				fw_get_framework_directory_uri('/includes/option-types/'. $this->get_type() .'/static/css/styles.css'),
+				array(),
+				fw()->manifest->get_version()
+			);
+
+			$enqueue = false;
+		}
 
 		fw()->backend->enqueue_options_static($option['inner-options']);
 
@@ -48,25 +54,32 @@ class FW_Option_Type_Multi extends FW_Option_Type
 		'</div>';
 	}
 
+	public function _get_data_for_js($id, $option, $data = array()) {
+		return false;
+	}
+
+	public function _default_label($id, $option) {
+		return false;
+	}
+
 	/**
 	 * @internal
 	 */
 	protected function _get_value_from_input($option, $input_value)
 	{
-		if (
-			is_array($input_value) ||
-			empty($option['value'])
-		) {
+		if ( is_array($input_value) || empty($option['value']) ) {
 			$value = array();
-
-			foreach (fw_extract_only_options($option['inner-options']) as $inner_id => $inner_option) {
-				$value[$inner_id] = fw()->backend->option_type($inner_option['type'])->get_value_from_input(
-					$inner_option,
-					isset($input_value[$inner_id]) ? $input_value[$inner_id] : null
-				);
-			}
 		} else {
 			$value = $option['value'];
+		}
+
+		foreach (fw_extract_only_options($option['inner-options']) as $inner_id => $inner_option) {
+			$value[$inner_id] = fw()->backend->option_type($inner_option['type'])->get_value_from_input(
+				isset($value[$inner_id])
+					? array_merge($inner_option, array('value' => $value[$inner_id]))
+					: $inner_option,
+				isset($input_value[$inner_id]) ? $input_value[$inner_id] : null
+			);
 		}
 
 		return $value;
@@ -91,4 +104,3 @@ class FW_Option_Type_Multi extends FW_Option_Type
 		);
 	}
 }
-FW_Option_Type::register('FW_Option_Type_Multi');

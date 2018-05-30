@@ -77,18 +77,7 @@ abstract class FW_Extension
 		$this->parent   = $data['parent'];
 		$this->depth    = $data['depth'];
 		$this->customizations_locations = $data['customizations_locations'];
-
-		{
-			$variables = fw_get_variables_from_file($this->path .'/manifest.php', array('manifest' => array()));
-			$manifest  = $variables['manifest'];
-			unset($variables);
-
-			if (empty($manifest['name'])) {
-				$manifest['name'] = fw_id_to_title($this->get_name());
-			}
-
-			$this->manifest = new FW_Extension_Manifest($manifest);
-		}
+		$this->manifest = _FW_Component_Extensions::_get_manifest($this->get_name(), self::$access_key);
 	}
 
 	/**
@@ -313,42 +302,42 @@ abstract class FW_Extension
 			FW_Cache::set($cache_key, $config);
 		}
 
-		return $key === null ? $config : fw_akg($key, $config);
+		return $key === null ? $config : fw_call( fw_akg( $key, $config ) );
 	}
 
 	/**
 	 * Return array with options from specified name/path
 	 * @param string $name Examples: 'framework', 'posts/portfolio'
+	 * @param array $variables These will be available in options file (like variables for view)
 	 * @return array
 	 */
-	final public function get_options($name)
+	final public function get_options($name, array $variables = array())
 	{
-		$path = $this->locate_path('/options/'. $name .'.php');
+		try {
+			return FW_Cache::get($cache_key = $this->get_cache_key('/options/'. $name));
+		} catch (FW_Cache_Not_Found_Exception $e) {
+			if ($path = $this->locate_path('/options/'. $name .'.php')) {
+				$variables = fw_get_variables_from_file($path, array('options' => array()), $variables);
+			} else {
+				$variables = array('options' => array());
+			}
 
-		if (!$path) {
-			return array();
+			FW_Cache::set($cache_key, $variables['options']);
+
+			return $variables['options'];
 		}
-
-		$variables = fw_get_variables_from_file($path, array('options' => array()));
-
-		return $variables['options'];
 	}
 
 	final public function get_settings_options()
 	{
-		$cache_key = $this->get_cache_key() .'/settings_options';
-
 		try {
-			return FW_Cache::get($cache_key);
+			return FW_Cache::get($cache_key = $this->get_cache_key('/settings_options'));
 		} catch (FW_Cache_Not_Found_Exception $e) {
-			$path = $this->get_path('/settings-options.php');
-
-			if (!file_exists($path)) {
-				FW_Cache::set($cache_key, array());
-				return array();
+			if (file_exists($path = $this->get_path('/settings-options.php'))) {
+				$variables = fw_get_variables_from_file($path, array('options' => array()));
+			} else {
+				$variables = array('options' => array());
 			}
-
-			$variables = fw_get_variables_from_file($path, array('options' => array()));
 
 			FW_Cache::set($cache_key, $variables['options']);
 
@@ -357,15 +346,35 @@ abstract class FW_Extension
 	}
 
 	/**
+	 * @since 2.6.9
+	 */
+	final public function get_rendered_docs() {
+		$docs_path = $this->get_path('/readme.md.php');
+
+		if (! file_exists($docs_path)) {
+			return false;
+		}
+
+		return fw()->backend->get_markdown_parser()->text(
+			/**
+			 * TODO: Perhaps send here some values in order to make extension docs
+			 * more dynamic???
+			 */
+			fw_render_view($docs_path, array())
+		);
+	}
+
+	/**
 	 * Get extension's settings option value from the database
 	 *
 	 * @param string|null $option_id
 	 * @param null|mixed $default_value If no option found in the database, this value will be returned
-	 * @param null|bool $get_original_value Original value is that with no translations and other changes
+	 * @param null|bool $get_original_value REMOVED https://github.com/ThemeFuse/Unyson/issues/1676
 	 *
 	 * @return mixed|null
 	 */
 	final public function get_db_settings_option( $option_id = null, $default_value = null, $get_original_value = null ) {
+
 		return fw_get_db_ext_settings_option( $this->get_name(), $option_id, $default_value, $get_original_value );
 	}
 
@@ -384,7 +393,7 @@ abstract class FW_Extension
 	 *
 	 * @param string|null $multi_key The key of the data you want to get. null - all data
 	 * @param null|mixed $default_value If no option found in the database, this value will be returned
-	 * @param null|bool $get_original_value Original value is that with no translations and other changes
+	 * @param null|bool $get_original_value REMOVED https://github.com/ThemeFuse/Unyson/issues/1676
 	 *
 	 * @return mixed|null
 	 */
@@ -400,6 +409,31 @@ abstract class FW_Extension
 	 */
 	final public function set_db_data( $multi_key = null, $value ) {
 		fw_set_db_extension_data( $this->get_name(), $multi_key, $value );
+	}
+
+	/**
+	 * Get extension's data from user meta
+	 *
+	 * @param int $user_id
+	 * @param string|null $keys
+	 *
+	 * @return mixed|null
+	 */
+	final public function get_user_data( $user_id, $keys = null ) {
+		return fw_get_db_extension_user_data($user_id, $this->get_name(), $keys);
+	}
+
+	/**
+	 * et some extension's data in user meta
+	 *
+	 * @param int $user_id
+	 * @param mixed $value
+	 * @param string|null $keys
+	 *
+	 * @return bool|int
+	 */
+	final public function set_user_data( $user_id, $value, $keys = null ) {
+		return fw_set_db_extension_user_data($user_id, $this->get_name(), $value, $keys);
 	}
 
 	final public function get_post_options($post_type)

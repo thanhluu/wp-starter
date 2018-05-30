@@ -21,7 +21,7 @@
 			var parsedFilesDetails = JSON.parse(elements.$container.attr('data-files-details'));
 		}
 
-		var	createFrame = function() {
+		var createFrame = function() {
 			var frameOpts = haveFilesDetails ?
 			{
 				library: {
@@ -31,11 +31,11 @@
 
 			frame = wp.media(frameOpts);
 
-			if(haveFilesDetails) {
+			if (haveFilesDetails) {
 				frame.on('content:render', function () {
 					var $view = this.first().frame.views.get('.media-frame-uploader')[0];
 
-					if(parsedFilesDetails.extra_mime_types.length > 0  && _.isArray(parsedFilesDetails.extra_mime_types)){
+					if (parsedFilesDetails.extra_mime_types.length > 0  && _.isArray(parsedFilesDetails.extra_mime_types)) {
 						_.each(parsedFilesDetails.extra_mime_types, function(mime_type){
 							mOxie.Mime.addMimeType(mime_type);
 						});
@@ -65,6 +65,7 @@
 						attachment = wp.media.attachment(attatchmentId);
 
 					frame.reset();
+
 					if (attachment.id) {
 						selection.add(attachment);
 					}
@@ -73,41 +74,90 @@
 				frame.on('select', function() {
 					var attachment = frame.state().get('selection').first();
 
-					elements.$textField.text(attachment.get('filename'));
-					elements.$uploadButton.text(l10n.buttonEdit);
-					elements.$input.val(attachment.id).trigger('change');
-					elements.$container.removeClass('empty');
+					elements.$input
+						.val(attachment.id)
+						.trigger('change'); // trigger Customizer update
 
-					fwe.trigger('fw:option-type:upload:change', {
-						$element: elements.$container,
-						attachment: attachment
-					});
-					elements.$container.trigger('fw:option-type:upload:change', {
-						attachment: attachment
-					});
+					performSelection(attachment);
 				});
 			};
 
 		elements.$uploadButton.on('click', function(e) {
 			e.preventDefault();
 
-			if (!frame) {
+			if (! frame) {
 				createFrame();
 			}
+
 			frame.open();
 		});
 
 		elements.$deleteButton.on('click', function(e) {
+			clearAttachment();
+			elements
+				.$input.val('')
+				.trigger('change'); // trigger Customizer update
+			e.preventDefault();
+		});
+
+		elements.$input.on('change', function () {
+			if (! $(this).val()) {
+				clearAttachment();
+				return;
+			}
+
+			var attachment = wp.media.attachment($(this).val());
+
+			if (! attachment.get('url')) {
+				attachment.fetch().then(function (data) {
+					performSelection(attachment);
+				});
+
+				return;
+			}
+
+			performSelection(attachment);
+		})
+
+		function clearAttachment () {
 			elements.$textField.text('');
 			elements.$uploadButton.text(l10n.buttonAdd);
-			elements.$input.val('').trigger('change');
 			elements.$container.addClass('empty');
 
 			fwe.trigger('fw:option-type:upload:clear', {$element: elements.$container});
 			elements.$container.trigger('fw:option-type:upload:clear');
 
-			e.preventDefault();
-		});
+			fw.options.trigger.changeForEl(elements.$container, {
+				value: {}
+			});
+
+			fw.options.trigger.scopedByType('clear', elements.$container, {
+				value: {}
+			});
+		}
+
+		function performSelection (attachment) {
+			elements.$textField.text(attachment.get('filename'));
+			elements.$uploadButton.text(l10n.buttonEdit);
+
+			elements.$container.removeClass('empty');
+
+			fwe.trigger('fw:option-type:upload:change', {
+				$element: elements.$container,
+				attachment: attachment
+			});
+
+			elements.$container.trigger('fw:option-type:upload:change', {
+				attachment: attachment
+			});
+
+			fw.options.trigger.changeForEl(elements.$container, {
+				value: {
+					attachment_id: attachment.get('id'),
+					url: attachment.get('url')
+				}
+			});
+		}
 	};
 
 	fwe.on('fw:options:init', function(data) {

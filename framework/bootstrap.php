@@ -1,5 +1,11 @@
 <?php if (!defined('ABSPATH')) die('Forbidden');
 
+if ( defined( 'WP_CLI' ) && WP_CLI && ! isset( $_SERVER['HTTP_HOST'] ) ) {
+	$_SERVER['HTTP_HOST'] = 'unyson.io';
+	$_SERVER['SERVER_NAME'] = 'unyson';
+	$_SERVER['SERVER_PORT'] = '80';
+}
+
 if (defined('FW')) {
 	/**
 	 * The framework is already loaded.
@@ -14,55 +20,29 @@ if (defined('FW')) {
 	add_action('after_setup_theme', '_action_init_framework');
 
 	function _action_init_framework() {
-		remove_action('after_setup_theme', '_action_init_framework');
+		if (did_action('fw_init')) {
+			return;
+		}
 
-		$fw_dir = dirname(__FILE__);
+		do_action('fw_before_init');
 
-		include $fw_dir .'/bootstrap-helpers.php';
+		$dir = dirname(__FILE__);
 
-		/**
-		 * Load core
-		 */
+		require $dir .'/autoload.php';
+
+		// Load helper functions
+		foreach (array('general', 'meta', 'fw-storage', 'database') as $file) {
+			require $dir .'/helpers/'. $file .'.php';
+		}
+
+		// Load core
 		{
-			require $fw_dir .'/core/Fw.php';
+			require $dir .'/core/Fw.php';
 
 			fw();
 		}
 
-		/**
-		 * Load helpers
-		 */
-		foreach (
-			array(
-				'meta',
-				'class-fw-access-key',
-				'class-fw-dumper',
-				'general',
-				'class-fw-wp-filesystem',
-				'class-fw-cache',
-				'class-fw-form',
-				'class-fw-request',
-				'class-fw-session',
-				'class-fw-wp-option',
-				'class-fw-wp-meta',
-				'database',
-				'class-fw-flash-messages',
-				'class-fw-resize',
-				'class-fw-wp-list-table',
-				'type/class-fw-type',
-				'type/class-fw-type-register',
-			)
-			as $file
-		) {
-			require $fw_dir .'/helpers/'. $file .'.php';
-		}
-
-		/**
-		 * Load includes
-		 */
-		foreach (array('hooks') as $file) {
-			require $fw_dir .'/includes/'. $file .'.php';
-		}
+		require $dir .'/includes/hooks.php';
 
 		/**
 		 * Init components

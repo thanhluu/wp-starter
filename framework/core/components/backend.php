@@ -7,23 +7,22 @@
  */
 final class _FW_Component_Backend {
 
-	/** @var callable */
-	private $print_meta_box_content_callback;
-
-	/** @var FW_Form */
+	/** @var FW_Settings_Form */
 	private $settings_form;
 
-	private $available_render_designs = array( 'default', 'taxonomy', 'customizer' );
+	private $available_render_designs = array(
+		'default', 'taxonomy', 'customizer', 'empty'
+	);
 
 	private $default_render_design = 'default';
 
 	/**
-	 * Store option types for registration, until they will be required
-	 * @var array|false
-	 *      array Can have some pending option types in it
-	 *      false Option types already requested and was registered, so do not use pending anymore
+	 * The singleton instance of Parsedown class that is used across
+	 * whole framework.
+	 *
+	 * @since 2.6.9
 	 */
-	private $option_types_pending_registration = array();
+	private $markdown_parser = null;
 
 	/**
 	 * Contains all option types
@@ -67,6 +66,22 @@ final class _FW_Component_Backend {
 	 */
 	public function _get_settings_page_slug() {
 		return 'fw-settings';
+	}
+
+	/**
+	 * @return string
+	 * @since 2.6.3
+	 */
+	public function get_options_name_attr_prefix() {
+		return 'fw_options';
+	}
+
+	/**
+	 * @return string
+	 * @since 2.6.3
+	 */
+	public function get_options_id_attr_prefix() {
+		return 'fw-option-';
 	}
 
 	private function get_current_edit_taxonomy() {
@@ -118,20 +133,14 @@ final class _FW_Component_Backend {
 		return $cache_current_taxonomy_data;
 	}
 
-	public function __construct() {
-		$this->print_meta_box_content_callback = create_function( '$post,$args', 'echo $args["args"];' );
-	}
+	public function __construct() {}
 
 	/**
 	 * @internal
 	 */
 	public function _init() {
 		if ( is_admin() ) {
-			$this->settings_form = new FW_Form('fw_settings', array(
-				'render' => array($this, '_settings_form_render'),
-				'validate' => array($this, '_settings_form_validate'),
-				'save' => array($this, '_settings_form_save'),
-			));
+			$this->settings_form = new FW_Settings_Form_Theme('theme-settings');
 		}
 
 		$this->add_actions();
@@ -154,7 +163,6 @@ final class _FW_Component_Backend {
 
 	private function add_actions() {
 		if ( is_admin() ) {
-			add_action('admin_menu', array($this, '_action_admin_menu'));
 			add_action('add_meta_boxes', array($this, '_action_create_post_meta_boxes'), 10, 2);
 			add_action('init', array($this, '_action_init'), 20);
 			add_action('admin_enqueue_scripts', array($this, '_action_admin_register_scripts'),
@@ -173,19 +181,49 @@ final class _FW_Component_Backend {
 				 */
 				11
 			);
+			add_action( 'admin_menu', array( $this, '_action_admin_menu' ) );
 
 			// render and submit options from javascript
 			{
 				add_action('wp_ajax_fw_backend_options_render', array($this, '_action_ajax_options_render'));
 				add_action('wp_ajax_fw_backend_options_get_values', array($this, '_action_ajax_options_get_values'));
+				add_action('wp_ajax_fw_backend_options_get_values_json', array($this, '_action_ajax_options_get_values_json'));
 			}
 		}
 
 		add_action('save_post', array($this, '_action_save_post'), 7, 3);
 		add_action('wp_restore_post_revision', array($this, '_action_restore_post_revision'), 10, 2);
-		add_action('_wp_put_post_revision', array($this, '_action__wp_put_post_revision'));
 
 		add_action('customize_register', array($this, '_action_customize_register'), 7);
+	}
+
+	public function _action_admin_menu() {
+
+		$parent_slug = 'index.php';
+		$menu_title  = esc_html__( 'New', 'fw' );
+
+		if ( isset( $GLOBALS['admin_page_hooks'] ) ) {
+			$parent_slug = 'fw-extensions';
+			$menu_title  = esc_html__( 'New', 'fw' );
+		}
+
+		add_submenu_page(
+			$parent_slug,
+			esc_html__( 'New', 'fw' ),
+			$menu_title,
+			'manage_options',
+			'fw-new',
+			array( $this, 'render_about_page' )
+		);
+	}
+
+	public function render_about_page() {
+
+		$file = WP_PLUGIN_DIR . '/unyson/framework/views/about.php';
+
+		if ( file_exists( $file ) ) {
+			include $file;
+		}
 	}
 
 	private function add_filters() {
@@ -197,74 +235,58 @@ final class _FW_Component_Backend {
 
 	/**
 	 * @param string|FW_Option_Type $option_type_class
+	 * @param string|null $type
 	 *
 	 * @internal
 	 */
-	private function register_option_type( $option_type_class ) {
-		if ( is_array( $this->option_types_pending_registration ) ) {
-			// Option types never requested. Continue adding to pending
-			$this->option_types_pending_registration[] = $option_type_class;
-		} else {
-			if ( is_string( $option_type_class ) ) {
-				$option_type_class = new $option_type_class;
+	private function register_option_type( $option_type_class, $type = null ) {
+		if ( $type == null ) {
+			try {
+				$type = $this->get_instance( $option_type_class )->get_type();
+			} catch ( FW_Option_Type_Exception_Invalid_Class $exception ) {
+				if ( ! is_subclass_of( $option_type_class, 'FW_Option_Type' ) ) {
+					trigger_error( 'Invalid option type class ' . get_class( $option_type_class ), E_USER_WARNING );
+
+					return;
+				}
 			}
-
-			if ( ! is_subclass_of( $option_type_class, 'FW_Option_Type' ) ) {
-				trigger_error( 'Invalid option type class ' . get_class( $option_type_class ), E_USER_WARNING );
-				return;
-			}
-
-			/**
-			 * @var FW_Option_Type $option_type_class
-			 */
-
-			$type = $option_type_class->get_type();
-
-			if ( isset( $this->option_types[ $type ] ) ) {
-				trigger_error( 'Option type "' . $type . '" already registered', E_USER_WARNING );
-				return;
-			}
-
-			$this->option_types[ $type ] = $option_type_class;
-
-			$this->option_types[ $type ]->_call_init($this->get_access_key());
 		}
+
+		if ( isset( $this->option_types[ $type ] ) ) {
+			trigger_error( 'Option type "' . $type . '" already registered', E_USER_WARNING );
+
+			return;
+		}
+
+		$this->option_types[$type] = $option_type_class;
 	}
 
 	/**
 	 * @param string|FW_Container_Type $container_type_class
+	 * @param string|null $type
 	 *
 	 * @internal
 	 */
-	private function register_container_type( $container_type_class ) {
-		if ( is_array( $this->container_types_pending_registration ) ) {
-			// Container types never requested. Continue adding to pending
-			$this->container_types_pending_registration[] = $container_type_class;
-		} else {
-			if ( is_string( $container_type_class ) ) {
-				$container_type_class = new $container_type_class;
+	private function register_container_type( $container_type_class, $type = null ) {
+		if ( $type == null ) {
+			try {
+				$type = $this->get_instance( $container_type_class )->get_type();
+			} catch ( FW_Option_Type_Exception_Invalid_Class $exception ) {
+				if ( ! is_subclass_of( $container_type_class, 'FW_Container_Type' ) ) {
+					trigger_error( 'Invalid container type class ' . get_class( $container_type_class ), E_USER_WARNING );
+
+					return;
+				}
 			}
-
-			if ( ! is_subclass_of( $container_type_class, 'FW_Container_Type' ) ) {
-				trigger_error( 'Invalid container type class ' . get_class( $container_type_class ), E_USER_WARNING );
-				return;
-			}
-
-			/**
-			 * @var FW_Container_Type $container_type_class
-			 */
-
-			$type = $container_type_class->get_type();
-
-			if ( isset( $this->container_types[ $type ] ) ) {
-				trigger_error( 'Container type "' . $type . '" already registered', E_USER_WARNING );
-				return;
-			}
-
-			$this->container_types[ $type ] = $container_type_class;
-
-			$this->container_types[ $type ]->_call_init($this->get_access_key());
 		}
+
+		if ( isset( $this->container_types[ $type ] ) ) {
+			trigger_error( 'Container type "' . $type . '" already registered', E_USER_WARNING );
+
+			return;
+		}
+
+		$this->container_types[$type] = $container_type_class;
 	}
 
 	private function register_static() {
@@ -299,7 +321,7 @@ final class _FW_Component_Backend {
 		wp_register_script(
 			'fw-events',
 			fw_get_framework_directory_uri( '/static/js/fw-events.js' ),
-			array( 'backbone' ),
+			array(),
 			fw()->manifest->get_version(),
 			true
 		);
@@ -341,21 +363,75 @@ final class _FW_Component_Backend {
 			);
 
 			wp_register_script(
+				'fw-reactive-options-registry',
+				fw_get_framework_directory_uri(
+					'/static/js/fw-reactive-options-registry.js'
+				),
+				array('fw', 'fw-events'),
+				false
+			);
+
+			wp_register_script(
+				'fw-reactive-options-simple-options',
+				fw_get_framework_directory_uri(
+					'/static/js/fw-reactive-options-simple-options.js'
+				),
+				array('fw', 'fw-events', 'fw-reactive-options-undefined-option'),
+				false
+			);
+
+			wp_register_script(
+				'fw-reactive-options-undefined-option',
+				fw_get_framework_directory_uri(
+					'/static/js/fw-reactive-options-undefined-option.js'
+				),
+				array(
+					'fw', 'fw-events', 'fw-reactive-options-registry'
+				),
+				false
+			);
+
+			wp_register_script(
+				'fw-reactive-options',
+				fw_get_framework_directory_uri('/static/js/fw-reactive-options.js'),
+				array(
+					'fw', 'fw-events', 'fw-reactive-options-undefined-option',
+					'fw-reactive-options-simple-options'
+				),
+				false
+			);
+
+			wp_register_script(
 				'fw',
 				fw_get_framework_directory_uri( '/static/js/fw.js' ),
 				array( 'jquery', 'fw-events', 'backbone', 'qtip' ),
 				fw()->manifest->get_version(),
-				true
+				false // false fixes https://github.com/ThemeFuse/Unyson/issues/1625#issuecomment-224219454
 			);
 
 			wp_localize_script( 'fw', '_fw_localized', array(
-				'FW_URI'   => fw_get_framework_directory_uri(),
-				'SITE_URI' => site_url(),
-				'l10n'     => array(
-					'done'     => __( 'Done', 'fw' ),
-					'ah_sorry' => __( 'Ah, Sorry', 'fw' ),
-					'save'     => __( 'Save', 'fw' ),
-					'reset'    => __( 'Reset', 'fw' ),
+				'FW_URI'     => fw_get_framework_directory_uri(),
+				'SITE_URI'   => site_url(),
+				'LOADER_URI' => apply_filters( 'fw_loader_image', fw_get_framework_directory_uri() . '/static/img/logo.svg' ),
+				'l10n'       => array_merge(
+					$l10n = array(
+						'modal_save_btn' => __( 'Save', 'fw' ),
+						'done'     => __( 'Done', 'fw' ),
+						'ah_sorry' => __( 'Ah, Sorry', 'fw' ),
+						'reset'    => __( 'Reset', 'fw' ),
+						'apply'    => __( 'Apply', 'fw' ),
+						'cancel'   => __( 'Cancel', 'fw' ),
+						'ok'       => __( 'Ok', 'fw' )
+					),
+					/**
+					 * fixes https://github.com/ThemeFuse/Unyson/issues/2381
+					 * @since 2.6.14
+					 */
+					apply_filters('fw_js_l10n', $l10n)
+				),
+				'options_modal' => array(
+					/** @since 2.6.13 */
+					'default_reset_bnt_disabled' => apply_filters('fw:option-modal:default:reset-btn-disabled', false)
 				),
 			) );
 		}
@@ -371,10 +447,14 @@ final class _FW_Component_Backend {
 			wp_register_script(
 				'fw-backend-options',
 				fw_get_framework_directory_uri( '/static/js/backend-options.js' ),
-				array( 'fw', 'fw-events', 'postbox', 'jquery-ui-tabs' ),
+				array( 'fw', 'fw-events', 'fw-reactive-options', 'postbox', 'jquery-ui-tabs' ),
 				fw()->manifest->get_version(),
 				true
 			);
+
+			wp_localize_script( 'fw', '_fw_backend_options_localized', array(
+				'lazy_tabs' => fw()->theme->get_config('lazy_tabs')
+			) );
 		}
 
 		{
@@ -419,11 +499,18 @@ final class _FW_Component_Backend {
 		}
 
 		wp_register_style(
-			'fw-font-awesome',
+			'font-awesome',
 			fw_get_framework_directory_uri( '/static/libs/font-awesome/css/font-awesome.min.css' ),
 			array(),
 			fw()->manifest->get_version()
 		);
+		/**
+		 * backwards compatibility, in case extensions are not up-to-date
+		 * todo: remove in next major version
+		 * https://github.com/ThemeFuse/Unyson/issues/2198
+		 * @deprecated
+		 */
+		wp_register_style('fw-font-awesome', fw_get_framework_directory_uri( '/static/libs/font-awesome/css/font-awesome.min.css' ));
 
 		wp_register_script(
 			'backbone-relational',
@@ -443,7 +530,11 @@ final class _FW_Component_Backend {
 
 		wp_register_script(
 			'fw-moment',
-			fw_get_framework_directory_uri( '/static/libs/moment/moment.min.js' ),
+			/**
+			 * IMPORTANT: At the end of the script is added this line:
+			 * moment.locale(document.documentElement.lang.slice(0, 2)); // fixes https://github.com/ThemeFuse/Unyson/issues/1767
+			 */
+			fw_get_framework_directory_uri( '/static/libs/moment/moment-with-locales.min.js' ),
 			array(),
 			fw()->manifest->get_version(),
 			true
@@ -468,131 +559,74 @@ final class _FW_Component_Backend {
 	}
 
 	/**
-	 * @internal
+	 * @param $class
+	 *
+	 * @return FW_Option_Type
+	 * @throws FW_Option_Type_Exception_Invalid_Class
 	 */
-	public function _action_admin_menu() {
-		$data = array(
-			'capability'       => 'manage_options',
-			'slug'             => $this->_get_settings_page_slug(),
-			'content_callback' => array( $this, '_print_settings_page' ),
-		);
-
-		if ( ! current_user_can( $data['capability'] ) ) {
-			return;
+	protected function get_instance( $class ) {
+		if ( ! class_exists( $class )
+		     || (
+			     ! is_subclass_of( $class, 'FW_Option_Type' )
+			     &&
+			     ! is_subclass_of( $class, 'FW_Container_Type' )
+		     )
+		) {
+			throw new FW_Option_Type_Exception_Invalid_Class( $class );
 		}
 
-		if ( ! fw()->theme->locate_path('/options/settings.php') ) {
-			return;
-		}
-
-		/**
-		 * Collect $hookname that contains $data['slug'] before the action
-		 * and skip them in verification after action
-		 */
-		{
-			global $_registered_pages;
-
-			$found_hooknames = array();
-
-			if ( ! empty( $_registered_pages ) ) {
-				foreach ( $_registered_pages as $hookname => $b ) {
-					if ( strpos( $hookname, $data['slug'] ) !== false ) {
-						$found_hooknames[ $hookname ] = true;
-					}
-				}
-			}
-		}
-
-		/**
-		 * Use this action if you what to add the settings page in a custom place in menu
-		 * Usage example http://pastebin.com/gvAjGRm1
-		 */
-		do_action( 'fw_backend_add_custom_settings_menu', $data );
-
-		/**
-		 * Check if settings menu was added in the action above
-		 */
-		{
-			$menu_exists = false;
-
-			if ( ! empty( $_registered_pages ) ) {
-				foreach ( $_registered_pages as $hookname => $b ) {
-					if ( isset( $found_hooknames[ $hookname ] ) ) {
-						continue;
-					}
-
-					if ( strpos( $hookname, $data['slug'] ) !== false ) {
-						$menu_exists = true;
-						break;
-					}
-				}
-			}
-		}
-
-		if ( $menu_exists ) {
-			return;
-		}
-
-		add_theme_page(
-			__( 'Theme Settings', 'fw' ),
-			__( 'Theme Settings', 'fw' ),
-			$data['capability'],
-			$data['slug'],
-			$data['content_callback']
-		);
-
-		add_action( 'admin_menu', array( $this, '_action_admin_change_theme_settings_order' ), 9999 );
+		return new $class;
 	}
 
 	public function _filter_admin_footer_text( $html ) {
-		// if (
-		// 	(
-		// 		current_user_can( 'update_themes' )
-		// 		||
-		// 		current_user_can( 'update_plugins' )
-		// 	)
-		// 	&&
-		// 	fw_current_screen_match(array(
-		// 		'only' => array(
-		// 			array('parent_base' => fw()->extensions->manager->get_page_slug()) // Unyson Extensions page
-		// 		)
-		// 	))
-		// ) {
-		// 	return ( empty( $html ) ? '' : $html . '<br/>' )
-		// 	. '<em>'
-		// 	. str_replace(
-		// 		array(
-		// 			'{wp_review_link}',
-		// 			'{facebook_share_link}',
-		// 			'{twitter_share_link}',
-		// 		),
-		// 		array(
-		// 			fw_html_tag('a', array(
-		// 				'target' => '_blank',
-		// 				'href'   => 'https://wordpress.org/support/view/plugin-reviews/unyson?filter=5#postform',
-		// 			), __('leave a review', 'fw')),
-		// 			fw_html_tag('a', array(
-		// 				'target' => '_blank',
-		// 				'href'   => 'https://www.facebook.com/sharer/sharer.php?'. http_build_query(array(
-		// 					'u' => 'http://unyson.io',
-		// 				)),
-		// 				'onclick' => 'return !window.open(this.href, \'Facebook\', \'width=640,height=300\')',
-		// 			), __('Facebook', 'fw')),
-		// 			fw_html_tag('a', array(
-		// 				'target' => '_blank',
-		// 				'href'   => 'https://twitter.com/home?'. http_build_query(array(
-		// 					'status' => __('Unyson WordPress Framework is the fastest and easiest way to develop a premium theme. I highly recommend it', 'fw')
-		// 						.' http://unyson.io/ #UnysonWP',
-		// 				)),
-		// 				'onclick' => 'return !window.open(this.href, \'Twitter\', \'width=640,height=430\')',
-		// 			), __('Twitter', 'fw')),
-		// 		),
-		// 		__('If you like Unyson, {wp_review_link}, share on {facebook_share_link} or {twitter_share_link}.', 'fw')
-		// 	)
-		// 	. '</em>';
-		// } else {
+		if (
+			(
+				current_user_can( 'update_themes' )
+				||
+				current_user_can( 'update_plugins' )
+			)
+			&&
+			fw_current_screen_match(array(
+				'only' => array(
+					array('parent_base' => fw()->extensions->manager->get_page_slug()) // Unyson Extensions page
+				)
+			))
+		) {
+			return ( empty( $html ) ? '' : $html . '<br/>' )
+			. '<em>'
+			. str_replace(
+				array(
+					'{wp_review_link}',
+					'{facebook_share_link}',
+					'{twitter_share_link}',
+				),
+				array(
+					fw_html_tag('a', array(
+						'target' => '_blank',
+						'href'   => 'https://wordpress.org/support/view/plugin-reviews/unyson?filter=5#postform',
+					), __('leave a review', 'fw')),
+					fw_html_tag('a', array(
+						'target' => '_blank',
+						'href'   => 'https://www.facebook.com/sharer/sharer.php?'. http_build_query(array(
+							'u' => 'http://unyson.io',
+						)),
+						'onclick' => 'return !window.open(this.href, \'Facebook\', \'width=640,height=300\')',
+					), __('Facebook', 'fw')),
+					fw_html_tag('a', array(
+						'target' => '_blank',
+						'href'   => 'https://twitter.com/home?'. http_build_query(array(
+							'status' => __('Unyson WordPress Framework is the fastest and easiest way to develop a premium theme. I highly recommend it', 'fw')
+								.' http://unyson.io/ #UnysonWP',
+						)),
+						'onclick' => 'return !window.open(this.href, \'Twitter\', \'width=640,height=430\')',
+					), __('Twitter', 'fw')),
+				),
+				__('If you like Unyson, {wp_review_link}, share on {facebook_share_link} or {twitter_share_link}.', 'fw')
+			)
+			. '</em>';
+		} else {
 			return $html;
-		// }
+		}
 	}
 
 	/**
@@ -611,51 +645,19 @@ final class _FW_Component_Backend {
 		}
 	}
 
-	public function _action_admin_change_theme_settings_order() {
-		global $submenu;
-
-		if ( ! isset( $submenu['themes.php'] ) ) {
-			// probably current user doesn't have this item in menu
-			return;
-		}
-
-		$id    = $this->_get_settings_page_slug();
-		$index = null;
-
-		foreach ( $submenu['themes.php'] as $key => $sm ) {
-			if ( $sm[2] == $id ) {
-				$index = $key;
-				break;
-			}
-		}
-
-		if ( ! empty( $index ) ) {
-			$item = $submenu['themes.php'][ $index ];
-			unset( $submenu['themes.php'][ $index ] );
-			array_unshift( $submenu['themes.php'], $item );
-		}
-	}
-
-	public function _print_settings_page() {
-		echo '<div class="wrap">';
-
-		if ( fw()->theme->get_config( 'settings_form_side_tabs' ) ) {
-			// this is needed for flash messages (admin notices) to be displayed properly
-			echo '<h2 class="fw-hidden"></h2>';
-		} else {
-			echo '<h2>' . __( 'Theme Settings', 'fw' ) . '</h2><br/>';
-		}
-
-		$this->settings_form->render();
-
-		echo '</div>';
-	}
-
 	/**
 	 * @param string $post_type
 	 * @param WP_Post $post
 	 */
 	public function _action_create_post_meta_boxes( $post_type, $post ) {
+		if ( 'comment' === $post_type || ( isset( $_GET['vc_action'] ) && $_GET['vc_action'] === 'vc_inline' ) ) {
+			/**
+			 * 1. https://github.com/ThemeFuse/Unyson/issues/3052
+			 * 2. This is wrong, comment is not a post(type) it is stored in a separate db table and has a separate meta (wp_comments and wp_commentmeta)
+			 */
+			return;
+		}
+
 		$options = fw()->theme->get_post_options( $post_type );
 
 		if ( empty( $options ) ) {
@@ -665,52 +667,47 @@ final class _FW_Component_Backend {
 		$collected = array();
 
 		fw_collect_options( $collected, $options, array(
-			'limit_option_types' => false,
+			'limit_option_types'    => false,
 			'limit_container_types' => false,
-			'limit_level' => 1,
-			'info_wrapper' => true,
+			'limit_level'           => 1,
 		) );
 
-		if (empty($collected)) {
+		if ( empty( $collected ) ) {
 			return;
 		}
 
 		$values = fw_get_db_post_option( $post->ID );
 
-		foreach ( $collected as &$option ) {
-			if (
-				$option['group'] === 'container'
-				&&
-				$option['option']['type'] === 'box'
-			) { // this is a box, add it as a metabox
-				$context  = isset( $option['option']['context'] )
-					? $option['option']['context']
-					: 'normal';
-				$priority = isset( $option['option']['priority'] )
-					? $option['option']['priority']
-					: 'default';
+		foreach ( $collected as $id => &$option ) {
+			if ( isset( $option['options'] ) && ( $option['type'] === 'box' || $option['type'] === 'group' ) ) {
+				$context  = isset( $option['context'] ) ? $option['context'] : 'normal';
+				$priority = isset( $option['priority'] ) ? $option['priority'] : 'default';
 
 				add_meta_box(
-					'fw-options-box-' . $option['id'],
-					empty( $option['option']['title'] ) ? ' ' : $option['option']['title'],
-					$this->print_meta_box_content_callback,
+					"fw-options-box-{$id}",
+					empty( $option['title'] ) ? ' ' : $option['title'],
+					array( $this, 'render_meta_box' ),
 					$post_type,
 					$context,
 					$priority,
-					$this->render_options( $option['option']['options'], $values )
+					$this->render_options( $option['options'], $values )
 				);
 			} else { // this is not a box, wrap it in auto-generated box
 				add_meta_box(
-					'fw-options-box:auto-generated:'. time() .':'. fw_unique_increment(),
+					'fw-options-box:auto-generated:' . time() . ':' . fw_unique_increment(),
 					' ',
-					$this->print_meta_box_content_callback,
+					array( $this, 'render_meta_box' ),
 					$post_type,
 					'normal',
 					'default',
-					$this->render_options( array($option['id'] => $option['option']), $values )
+					$this->render_options( array( $id => $option ), $values )
 				);
 			}
 		}
+	}
+
+	public function render_meta_box( $post, $args ) {
+		echo $args['args'];
 	}
 
 	/**
@@ -727,7 +724,7 @@ final class _FW_Component_Backend {
 
 		fw_collect_options( $collected, $options, array(
 			'limit_option_types' => false,
-			'limit_container_types' => array(), // only simple options are allowed on taxonomy edit page
+			'limit_container_types' => false,
 			'limit_level' => 1,
 		) );
 
@@ -740,54 +737,81 @@ final class _FW_Component_Backend {
 		// fixes word_press style: .form-field input { width: 95% }
 		echo '<style type="text/css">.fw-option-type-radio input, .fw-option-type-checkbox input { width: auto; }</style>';
 
+		do_action( 'fw_backend_options_render:taxonomy:before' );
 		echo $this->render_options( $collected, $values, array(), 'taxonomy' );
+		do_action( 'fw_backend_options_render:taxonomy:after' );
+	}
+
+	/**
+	 * @param string $taxonomy
+	 */
+	public function _action_create_add_taxonomy_options( $taxonomy ) {
+		$options = fw()->theme->get_taxonomy_options( $taxonomy );
+
+		if ( empty( $options ) ) {
+			return;
+		}
+
+		$collected = array();
+
+		fw_collect_options( $collected, $options, array(
+			'limit_option_types'    => false,
+			'limit_container_types' => false,
+			'limit_level'           => 1,
+		) );
+
+		if ( empty( $collected ) ) {
+			return;
+		}
+
+		// fixes word_press style: .form-field input { width: 95% }
+		echo '<style type="text/css">.fw-option-type-radio input, .fw-option-type-checkbox input { width: auto; }</style>';
+
+		do_action( 'fw_backend_options_render:taxonomy:before' );
+
+		echo '<div class="fw-force-xs">';
+		echo $this->render_options( $collected, array(), array(), 'taxonomy' );
+		echo '</div>';
+
+		do_action( 'fw_backend_options_render:taxonomy:after' );
+
+		echo '<script type="text/javascript">'
+			.'jQuery(function($){'
+			.'    $("#submit").on("click", function(){'
+			.'        $("html, body").animate({ scrollTop: $("#col-left").offset().top });'
+			.'    });'
+			.'});'
+			.'</script>';
 	}
 
 	public function _action_init() {
 		$current_edit_taxonomy = $this->get_current_edit_taxonomy();
 
 		if ( $current_edit_taxonomy['taxonomy'] ) {
-			add_action( $current_edit_taxonomy['taxonomy'] . '_edit_form_fields',
-				array( $this, '_action_create_taxonomy_options' ), 10 );
+			add_action(
+				$current_edit_taxonomy['taxonomy'] . '_edit_form',
+				array( $this, '_action_create_taxonomy_options' )
+			);
+
+			if (fw()->theme->get_config('taxonomy_create_has_unyson_options', true)) {
+				add_action(
+					$current_edit_taxonomy['taxonomy'] . '_add_form_fields',
+					array( $this, '_action_create_add_taxonomy_options' )
+				);
+			}
 		}
 
 		if ( ! empty( $_POST ) ) {
 			// is form submit
 			add_action( 'edited_term', array( $this, '_action_term_edit' ), 10, 3 );
-		}
-	}
 
-	/**
-	 * Experimental custom options save
-	 * @param array $options
-	 * @param array $values
-	 * @return array
-	 */
-	private function process_options_handlers($options, $values)
-	{
-		$handled_values = array();
-
-		foreach (
-			fw_extract_only_options($options)
-			as $option_id => $option
-		) {
-			if (
-				isset($option['option_handler'])
-				&&
-				$option['option_handler'] instanceof FW_Option_Handler
-			) {
-				/*
-				 * if the option has a custom option_handler
-				 * the saving is delegated to the handler,
-				 * so it does not go to the post_meta
-				 */
-				$option['option_handler']->save_option_value($option_id, $option, $values[$option_id]);
-
-				$handled_values[$option_id] = true;
+			if ($current_edit_taxonomy['taxonomy']) {
+				add_action(
+					'create_' . $current_edit_taxonomy['taxonomy'],
+					array($this, '_action_save_taxonomy_fields')
+				);
 			}
 		}
-
-		return $handled_values;
 	}
 
 	/**
@@ -797,12 +821,13 @@ final class _FW_Component_Backend {
 	 * @param bool $update
 	 */
 	public function _action_save_post( $post_id, $post, $update ) {
+
 		if (
 			isset($_POST['post_ID'])
 			&&
 			intval($_POST['post_ID']) === intval($post_id)
 			&&
-			!empty($_POST[ FW_Option_Type::get_default_name_prefix() ]) // this happens on Quick Edit
+			!empty($_POST[ $this->get_options_name_attr_prefix() ]) // this happens on Quick Edit
 		) {
 			/**
 			 * This happens on regular post form submit
@@ -822,19 +847,12 @@ final class _FW_Component_Backend {
 			}
 
 			$old_values = (array)fw_get_db_post_option($post_id);
-			$current_values = fw_get_options_values_from_input(
-				fw()->theme->get_post_options($post->post_type)
-			);
 
 			fw_set_db_post_option(
 				$post_id,
 				null,
-				array_diff_key( // remove handled values
-					$current_values,
-					$this->process_options_handlers(
-						fw()->theme->get_post_options($post->post_type),
-						$current_values
-					)
+				fw_get_options_values_from_input(
+					fw()->theme->get_post_options($post->post_type)
 				)
 			);
 
@@ -844,6 +862,7 @@ final class _FW_Component_Backend {
 			 */
 			do_action( 'fw_save_post_options', $post_id, $post, $old_values );
 		} elseif ($original_post_id = wp_is_post_autosave( $post_id )) {
+
 			do {
 				$parent = get_post($post->post_parent);
 
@@ -851,32 +870,22 @@ final class _FW_Component_Backend {
 					break;
 				}
 
-				if (
-					isset($_POST['post_ID'])
-					&&
-					intval($_POST['post_ID']) === intval($parent->ID)
-				) {} else {
+				if ( isset($_POST['post_ID']) && intval($_POST['post_ID']) === intval($parent->ID) ) {
+
+				} else {
 					break;
 				}
 
-				if (empty($_POST[ FW_Option_Type::get_default_name_prefix() ])) {
+				if (empty($_POST[ $this->get_options_name_attr_prefix() ])) {
 					// this happens on Quick Edit
 					break;
 				}
 
-				$current_values = fw_get_options_values_from_input(
-					fw()->theme->get_post_options($parent->post_type)
-				);
-
 				fw_set_db_post_option(
 					$post->ID,
 					null,
-					array_diff_key( // remove handled values
-						$current_values,
-						$this->process_options_handlers(
-							fw()->theme->get_post_options($parent->post_type),
-							$current_values
-						)
+					fw_get_options_values_from_input(
+						fw()->theme->get_post_options($parent->post_type)
 					)
 				);
 			} while(false);
@@ -913,52 +922,27 @@ final class _FW_Component_Backend {
 	}
 
 	/**
-	 * @param $revision_id
-	 */
-	public function _action__wp_put_post_revision($revision_id)
-	{
-		/**
-		 * Copy options meta from post to revision
-		 */
-		fw_set_db_post_option(
-			$revision_id,
-			null,
-			(array)fw_get_db_post_option(
-				wp_is_post_revision($revision_id),
-				null,
-				array()
-			)
-		);
-	}
-
-	/**
 	 * Update all post meta `fw_option:<option-id>` with values from post options that has the 'save-in-separate-meta' parameter
 	 *
 	 * @param int $post_id
 	 *
 	 * @return bool
+	 * @deprecated since 2.5.0
 	 */
 	public function _sync_post_separate_meta( $post_id ) {
-		$post_type = get_post_type( $post_id );
-
-		if ( ! $post_type ) {
+		if ( ! ( $post_type = get_post_type( $post_id ) ) ) {
 			return false;
 		}
 
 		$meta_prefix = 'fw_option:';
+		$only_options = fw_extract_only_options( fw()->theme->get_post_options( $post_type ) );
+		$separate_meta_options = array();
 
-		/**
-		 * Collect all options that needs to be saved in separate meta
-		 */
+		// Collect all options that needs to be saved in separate meta
 		{
 			$options_values = fw_get_db_post_option( $post_id );
 
-			$separate_meta_options = array();
-
-			foreach (
-				fw_extract_only_options( fw()->theme->get_post_options( $post_type ) )
-				as $option_id => $option
-			) {
+			foreach ($only_options as $option_id => $option) {
 				if (
 					isset( $option['save-in-separate-meta'] )
 					&&
@@ -966,6 +950,23 @@ final class _FW_Component_Backend {
 					&&
 					array_key_exists( $option_id, $options_values )
 				) {
+					if (defined('WP_DEBUG') && WP_DEBUG) {
+						FW_Flash_Messages::add(
+							'save-in-separate-meta:deprecated',
+							'<p>The <code>save-in-separate-meta</code> option parameter is <strong>deprecated</strong>.</p>'
+							.'<p>Please replace</p>'
+							.'<pre>\'save-in-separate-meta\' => true</pre>'
+							.'<p>with</p>'
+							.'<pre>\'fw-storage\' => array('
+							."\n	'type' => 'post-meta',"
+							."\n	'post-meta' => 'fw_option:{your-option-id}',"
+							."\n)</pre>"
+							.'<p>in <code>{theme}'. fw_get_framework_customizations_dir_rel_path('/theme/options/posts/'. $post_type .'.php') .'</code></p>'
+							.'<p><a href="'. esc_attr('http://manual.unyson.io/en/latest/options/storage.html#content') .'" target="_blank">'. esc_html__('Info about fw-storage', 'fw') .'</a></p>',
+							'warning'
+						);
+					}
+
 					$separate_meta_options[ $meta_prefix . $option_id ] = $options_values[ $option_id ];
 				}
 			}
@@ -973,9 +974,7 @@ final class _FW_Component_Backend {
 			unset( $options_values );
 		}
 
-		/**
-		 * Delete meta that starts with $meta_prefix
-		 */
+		// Delete meta that starts with $meta_prefix
 		{
 			/** @var wpdb $wpdb */
 			global $wpdb;
@@ -989,10 +988,17 @@ final class _FW_Component_Backend {
 						$wpdb->esc_like( $meta_prefix ) . '%',
 						$post_id
 					)
-				)
-				as $row
+				) as $row
 			) {
-				if ( array_key_exists( $row->meta_key, $separate_meta_options ) ) {
+				if (
+					array_key_exists( $row->meta_key, $separate_meta_options )
+					||
+					( // skip options containing 'fw-storage'
+						($option_id = substr($row->meta_key, 10))
+						&&
+						isset($only_options[$option_id]['fw-storage'])
+					)
+				) {
 					/**
 					 * This meta exists and will be updated below.
 					 * Do not delete for performance reasons, instead of delete->insert will be performed only update
@@ -1006,34 +1012,76 @@ final class _FW_Component_Backend {
 		}
 
 		foreach ( $separate_meta_options as $meta_key => $option_value ) {
-			update_post_meta( $post_id, $meta_key, $option_value );
+			fw_update_post_meta($post_id, $meta_key, $option_value );
 		}
 
 		return true;
 	}
 
-	public function _action_term_edit( $term_id, $tt_id, $taxonomy ) {
-		if ( ! isset( $_POST['action'] ) || ! isset( $_POST['taxonomy'] ) ) {
-			return; // this is not real term form submit, abort save
+	/**
+	 * @param int $term_id
+	 */
+	public function _action_save_taxonomy_fields( $term_id ) {
+		if (
+			isset( $_POST['action'] )
+			&&
+			'add-tag' === $_POST['action']
+			&&
+			isset( $_POST['taxonomy'] )
+			&&
+			($taxonomy = get_taxonomy( $_POST['taxonomy'] ))
+			&&
+			current_user_can($taxonomy->cap->edit_terms)
+		) { /* ok */ } else { return; }
+
+		$options = fw()->theme->get_taxonomy_options( $taxonomy->name );
+		if ( empty( $options ) ) {
+			return;
 		}
+
+		fw_set_db_term_option(
+			$term_id,
+			$taxonomy->name,
+			null,
+			fw_get_options_values_from_input($options)
+		);
+
+		do_action( 'fw_save_term_options', $term_id, $taxonomy->name, array() );
+	}
+
+	public function _action_term_edit( $term_id, $tt_id, $taxonomy ) {
+		if (
+			isset( $_POST['action'] )
+			&&
+			'editedtag' === $_POST['action']
+			&&
+			isset( $_POST['taxonomy'] )
+			&&
+			($taxonomy = get_taxonomy( $_POST['taxonomy'] ))
+			&&
+			current_user_can($taxonomy->cap->edit_terms)
+		) { /* ok */ } else { return; }
 
 		if (intval(FW_Request::POST('tag_ID')) != $term_id) {
 			// the $_POST values belongs to another term, do not save them into this one
 			return;
 		}
 
-		$old_values = (array) fw_get_db_term_option( $term_id, $taxonomy );
+		$options = fw()->theme->get_taxonomy_options( $taxonomy->name );
+		if ( empty( $options ) ) {
+			return;
+		}
+
+		$old_values = (array) fw_get_db_term_option( $term_id, $taxonomy->name );
 
 		fw_set_db_term_option(
 			$term_id,
-			$taxonomy,
+			$taxonomy->name,
 			null,
-			fw_get_options_values_from_input(
-				fw()->theme->get_taxonomy_options( $taxonomy )
-			)
+			fw_get_options_values_from_input($options)
 		);
 
-		do_action( 'fw_save_term_options', $term_id, $taxonomy, $old_values );
+		do_action( 'fw_save_term_options', $term_id, $taxonomy->name, $old_values );
 	}
 
 	public function _action_admin_register_scripts() {
@@ -1041,31 +1089,21 @@ final class _FW_Component_Backend {
 	}
 
 	public function _action_admin_enqueue_scripts() {
-		global $current_screen, $plugin_page, $post;
-
 		/**
 		 * Enqueue settings options static in <head>
+		 * @see FW_Settings_Form_Theme::_action_admin_enqueue_scripts()
 		 */
-		{
-			if ( $this->_get_settings_page_slug() === $plugin_page ) {
-				fw()->backend->enqueue_options_static(
-					fw()->theme->get_settings_options()
-				);
-
-				do_action( 'fw_admin_enqueue_scripts:settings' );
-			}
-		}
 
 		/**
 		 * Enqueue post options static in <head>
 		 */
 		{
-			if ( 'post' === $current_screen->base && $post ) {
+			if ( 'post' === get_current_screen()->base && get_the_ID() ) {
 				fw()->backend->enqueue_options_static(
-					fw()->theme->get_post_options( $post->post_type )
+					fw()->theme->get_post_options( get_post_type() )
 				);
 
-				do_action( 'fw_admin_enqueue_scripts:post', $post );
+				do_action( 'fw_admin_enqueue_scripts:post', get_post() );
 			}
 		}
 
@@ -1074,17 +1112,15 @@ final class _FW_Component_Backend {
 		 */
 		{
 			if (
-				'edit-tags' === $current_screen->base
+				in_array(get_current_screen()->base, array('edit-tags', 'term'), true)
 				&&
-				$current_screen->taxonomy
-				&&
-				! empty( $_GET['tag_ID'] )
+				get_current_screen()->taxonomy
 			) {
 				fw()->backend->enqueue_options_static(
-					fw()->theme->get_taxonomy_options( $current_screen->taxonomy )
+					fw()->theme->get_taxonomy_options( get_current_screen()->taxonomy )
 				);
 
-				do_action( 'fw_admin_enqueue_scripts:term', $current_screen->taxonomy );
+				do_action( 'fw_admin_enqueue_scripts:term', get_current_screen()->taxonomy );
 			}
 		}
 	}
@@ -1119,9 +1155,25 @@ final class _FW_Component_Backend {
 		{
 			if ( isset( $_POST['values'] ) ) {
 				$values = FW_Request::POST( 'values' );
+
+				if (is_string($values)) {
+					$values = json_decode($values, true);
+				}
 			} else {
 				$values = array();
 			}
+
+			$filtered_values = apply_filters(
+				'fw:ajax_options_render:values',
+				null,
+				$options,
+				$values
+			);
+
+			$values = $filtered_values ? $filtered_values : array_intersect_key(
+				$values,
+				fw_extract_only_options( $options )
+			);
 		}
 
 		// data
@@ -1133,67 +1185,10 @@ final class _FW_Component_Backend {
 			}
 		}
 
-		{
-			foreach ( fw_extract_only_options( $options ) as $option_id => $option ) {
-				if ( ! isset( $values[ $option_id ] ) ) {
-					continue;
-				}
-
-				/**
-				 * Fix booleans
-				 *
-				 * In POST, booleans are transformed to strings: 'true' and 'false'
-				 * Transform them back to booleans
-				 */
-				do {
-					/**
-					 * Detect if option is using booleans by sending it a boolean input value
-					 * If it returns a boolean, then it works with booleans
-					 */
-					if ( ! is_bool(
-						fw()->backend->option_type( $option['type'] )->get_value_from_input( $option, true )
-					) ) {
-						break;
-					}
-
-					if ( is_bool( $values[ $option_id ] ) ) {
-						// value is already boolean, does not need to fix
-						break;
-					}
-
-					$values[ $option_id ] = ( $values[ $option_id ] === 'true' );
-
-					continue 2;
-				} while(false);
-
-				/**
-				 * Fix integers
-				 *
-				 * In POST, integers are transformed to strings: '0', '1', '2', ...
-				 * Transform them back to integers
-				 */
-				do {
-					if (!is_numeric($values[ $option_id ])) {
-						// do nothing if value is not a number
-						break;
-					}
-
-					/**
-					 * Detect if option is using integer value by checking $option['value']
-					 */
-					if ( isset($option['value']) && !is_int($option['value']) ) {
-						continue;
-					}
-
-					$values[ $option_id ] = (int)$values[ $option_id ];
-
-					continue 2;
-				} while(false);
-			}
-		}
-
 		wp_send_json_success( array(
-			'html' => fw()->backend->render_options( $options, $values, $data )
+			'html' => fw()->backend->render_options( $options, $values, $data ),
+			/** @since 2.6.1 */
+			'default_values' => fw_get_options_values_from_input($options, array()),
 		) );
 	}
 
@@ -1215,7 +1210,11 @@ final class _FW_Component_Backend {
 				) );
 			}
 
-			$options = json_decode( FW_Request::POST( 'options' ), true );
+			$options = FW_Request::POST( 'options' );
+
+			if (is_string( $options )) {
+				$options = json_decode( FW_Request::POST( 'options' ), true );
+			}
 
 			if ( ! $options ) {
 				wp_send_json_error( array(
@@ -1229,7 +1228,7 @@ final class _FW_Component_Backend {
 			if ( isset( $_POST['name_prefix'] ) ) {
 				$name_prefix = FW_Request::POST( 'name_prefix' );
 			} else {
-				$name_prefix = FW_Option_Type::get_default_name_prefix();
+				$name_prefix = $this->get_options_name_attr_prefix();
 			}
 		}
 
@@ -1241,102 +1240,66 @@ final class _FW_Component_Backend {
 		) );
 	}
 
-	public function _settings_form_render( $data ) {
+	/**
+	 * Get options values from html generated with 'fw_backend_options_render' ajax action
+	 *
+	 * POST vars:
+	 * - options: '[{option_id: {...}}, {option_id: {...}}, ...]' // Required // String JSON
+	 * - values: {option_id: {...}}
+	 *
+	 * Tip: Inside form html, add: <input type="hidden" name="options" value="[...json...]">
+	 */
+	public function _action_ajax_options_get_values_json() {
+		// options
 		{
-			$this->enqueue_options_static( array() );
+			if ( ! isset( $_POST['options'] ) ) {
+				wp_send_json_error( array(
+					'message' => 'No options'
+				) );
+			}
 
-			wp_enqueue_script( 'fw-form-helpers' );
-		}
+			$options = FW_Request::POST( 'options' );
 
-		$options = fw()->theme->get_settings_options();
+			if (is_string( $options )) {
+				$options = json_decode( FW_Request::POST( 'options' ), true );
+			}
 
-		if ( empty( $options ) ) {
-			return $data;
-		}
-
-		if ( $values = FW_Request::POST( FW_Option_Type::get_default_name_prefix() ) ) {
-			// This is form submit, extract correct values from $_POST values
-			$values = fw_get_options_values_from_input( $options, $values );
-		} else {
-			// Extract previously saved correct values
-			$values = fw_get_db_settings_option();
-		}
-
-		$ajax_submit = fw()->theme->get_config( 'settings_form_ajax_submit' );
-		$side_tabs   = fw()->theme->get_config( 'settings_form_side_tabs' );
-
-		$data['attr']['class'] = 'fw-settings-form';
-
-		if ( $side_tabs ) {
-			$data['attr']['class'] .= ' fw-backend-side-tabs';
-		}
-
-		$data['submit']['html'] = '<!-- -->'; // is generated in view
-
-		do_action( 'fw_settings_form_render', array(
-			'ajax_submit' => $ajax_submit,
-			'side_tabs'   => $side_tabs,
-		) );
-
-		fw_render_view( fw_get_framework_directory( '/views/backend-settings-form.php' ), array(
-			'options'              => $options,
-			'values'               => $values,
-			'focus_tab_input_name' => '_focus_tab',
-			'reset_input_name'     => '_fw_reset_options',
-			'ajax_submit'          => $ajax_submit,
-			'side_tabs'            => $side_tabs,
-		), false );
-
-		return $data;
-	}
-
-	public function _settings_form_validate( $errors ) {
-		if ( ! current_user_can( 'manage_options' ) ) {
-			$errors['_no_permission'] = __( 'You have no permissions to change settings options', 'fw' );
-		}
-
-		return $errors;
-	}
-
-	public function _settings_form_save( $data ) {
-		$flash_id   = 'fw_settings_form_save';
-		$old_values = (array) fw_get_db_settings_option();
-
-		if ( ! empty( $_POST['_fw_reset_options'] ) ) { // The "Reset" button was pressed
-			fw_set_db_settings_option( null, array() );
-
-			FW_Flash_Messages::add( $flash_id, __( 'The options were successfully reset', 'fw' ), 'success' );
-
-			do_action( 'fw_settings_form_reset', $old_values );
-		} else { // The "Save" button was pressed
-			fw_set_db_settings_option(
-				null,
-				fw_get_options_values_from_input(
-					fw()->theme->get_settings_options()
-				)
-			);
-
-			FW_Flash_Messages::add( $flash_id, __( 'The options were successfully saved', 'fw' ), 'success' );
-
-			do_action( 'fw_settings_form_saved', $old_values );
-		}
-
-		$redirect_url = fw_current_url();
-
-		{
-			$focus_tab_input_name = '_focus_tab';
-			$focus_tab_id         = trim( FW_Request::POST( $focus_tab_input_name ) );
-
-			if ( ! empty( $focus_tab_id ) ) {
-				$redirect_url = add_query_arg( $focus_tab_input_name, $focus_tab_id,
-					remove_query_arg( $focus_tab_input_name, $redirect_url )
-				);
+			if ( ! $options ) {
+				wp_send_json_error( array(
+					'message' => 'Wrong options'
+				) );
 			}
 		}
 
-		$data['redirect'] = $redirect_url;
+		// values
+		{
+			if ( ! isset( $_POST['values'] ) ) {
+				wp_send_json_error( array(
+					'message' => 'No values'
+				) );
+			}
 
-		return $data;
+			$values = FW_Request::POST( 'values' );
+
+			if (is_string( $values )) {
+				$values = json_decode( FW_Request::POST( 'values' ), true );
+			}
+
+			if (! is_array($values)) {
+				if ( ! $values ) {
+					wp_send_json_error(array(
+						'message' => 'Wrong values'
+					));
+				}
+			}
+		}
+
+		wp_send_json_success( array(
+			'values' => fw_get_options_values_from_input(
+				$options,
+				$values
+			)
+		) );
 	}
 
 	/**
@@ -1418,17 +1381,39 @@ final class _FW_Component_Backend {
 
 			switch ( $collected_type['group'] ) {
 				case 'container':
-					$html .= $this->container_type($collected_type['type'])->render(
-						$collected_type_options,
-						$values,
-						$options_data
-					);
+					if ($design === 'taxonomy') {
+						$html .= fw_render_view(
+							fw_get_framework_directory('/views/backend-container-design-'. $design .'.php'),
+							array(
+								'type' => $collected_type['type'],
+								'html' => $this->container_type($collected_type['type'])->render(
+									$collected_type_options, $values, $options_data
+								),
+							)
+						);
+					} else {
+						$html .= $this->container_type($collected_type['type'])->render(
+							$collected_type_options, $values, $options_data
+						);
+					}
 					break;
 				case 'option':
 					foreach ( $collected_type_options as $id => &$_option ) {
 						$data = $options_data; // do not change directly to not affect next loops
 
-						$data['value'] = isset( $values[ $id ] ) ? $values[ $id ] : null;
+						$maybe_future_value = apply_filters(
+							'fw:render_options:option_value',
+							null,
+							$values,
+							$_option,
+							$id
+						);
+
+						if (! $maybe_future_value) {
+							$maybe_future_value = isset( $values[ $id ] ) ? $values[ $id ] : null;
+						}
+
+						$data['value'] = $maybe_future_value;
 
 						$html .= $this->render_option(
 							$id,
@@ -1470,6 +1455,8 @@ final class _FW_Component_Backend {
 	 * @param array $options
 	 */
 	public function enqueue_options_static( $options ) {
+		static $static_enqueue = true;
+
 		if (
 			!doing_action('admin_enqueue_scripts')
 			&&
@@ -1487,11 +1474,15 @@ final class _FW_Component_Backend {
 			 * in case if this method is called before enqueue_scripts action
 			 * and option types has some of these in their dependencies
 			 */
-			$this->register_static();
+			if ($static_enqueue) {
+				$this->register_static();
 
-			wp_enqueue_media();
-			wp_enqueue_style( 'fw-backend-options' );
-			wp_enqueue_script( 'fw-backend-options' );
+				wp_enqueue_media();
+				wp_enqueue_style( 'fw-backend-options' );
+				wp_enqueue_script( 'fw-backend-options' );
+
+				$static_enqueue = false;
+			}
 		}
 
 		$collected = array();
@@ -1500,15 +1491,21 @@ final class _FW_Component_Backend {
 			'limit_option_types' => false,
 			'limit_container_types' => false,
 			'limit_level' => 0,
-			'info_wrapper' => true,
+			'callback' => array(__CLASS__, '_callback_fw_collect_options_enqueue_static'),
 		) );
 
-		foreach ( $collected as &$option ) {
-			if ($option['group'] === 'option') {
-				fw()->backend->option_type($option['option']['type'])->enqueue_static($option['id'], $option['option']);
-			} elseif ($option['group'] === 'container') {
-				fw()->backend->container_type($option['option']['type'])->enqueue_static($option['id'], $option['option']);
-			}
+		unset($collected);
+	}
+
+	/**
+	 * @internal
+	 * @param array $data
+	 */
+	public static function _callback_fw_collect_options_enqueue_static($data) {
+		if ($data['group'] === 'option') {
+			fw()->backend->option_type($data['option']['type'])->enqueue_static($data['id'], $data['option']);
+		} elseif ($data['group'] === 'container') {
+			fw()->backend->container_type($data['option']['type'])->enqueue_static($data['id'], $data['option']);
 		}
 	}
 
@@ -1523,8 +1520,15 @@ final class _FW_Component_Backend {
 	 * @return string
 	 */
 	public function render_option( $id, $option, $data = array(), $design = null ) {
+
+		$maybe_forced_design = fw()->backend->option_type( $option['type'] )->get_forced_render_design();
+
 		if (empty($design)) {
 			$design = $this->default_render_design;
+		}
+
+		if ($maybe_forced_design) {
+			$design = $maybe_forced_design;
 		}
 
 		if (
@@ -1548,20 +1552,13 @@ final class _FW_Component_Backend {
 		}
 
 		if ( ! isset( $data['id_prefix'] ) ) {
-			$data['id_prefix'] = FW_Option_Type::get_default_id_prefix();
+			$data['id_prefix'] = $this->get_options_id_attr_prefix();
 		}
 
-		if (
-			isset($option['option_handler']) &&
-			$option['option_handler'] instanceof FW_Option_Handler
-		) {
-
-			/*
-			 * if the option has a custom option_handler
-			 * then the handler provides the option's value
-			 */
-			$data['value'] = $option['option_handler']->get_option_value($id, $option, $data);
-		}
+		$data = apply_filters(
+			'fw:backend:option-render:data',
+			$data
+		);
 
 		return fw_render_view(fw_get_framework_directory('/views/backend-option-design-'. $design .'.php'), array(
 			'id'     => $id,
@@ -1621,7 +1618,7 @@ final class _FW_Component_Backend {
 			add_meta_box(
 				$placeholders['id'],
 				$placeholders['title'],
-				$this->print_meta_box_content_callback,
+				array( $this, 'render_meta_box' ),
 				$temp_screen_id,
 				$context,
 				'default',
@@ -1725,12 +1722,12 @@ final class _FW_Component_Backend {
 	 *
 	 * @internal
 	 */
-	public function _register_option_type( FW_Access_Key $access_key, $option_type_class ) {
+	public function _register_option_type( FW_Access_Key $access_key, $option_type_class, $type= null ) {
 		if ( $access_key->get_key() !== 'fw_option_type' ) {
 			trigger_error( 'Call denied', E_USER_ERROR );
 		}
 
-		$this->register_option_type( $option_type_class );
+		$this->register_option_type( $option_type_class, $type );
 	}
 
 	/**
@@ -1748,45 +1745,33 @@ final class _FW_Component_Backend {
 	}
 
 	/**
-	 * @param string $option_type
-	 *
-	 * @return FW_Option_Type|FW_Option_Type_Undefined
+	 * @param string $type
+	 * @return FW_Option_Type
 	 */
-	public function option_type( $option_type ) {
-		if ( is_array( $this->option_types_pending_registration ) ) {
-			// This method is called first time
-
-			do_action('fw_option_types_init');
-
-			// Register pending option types
-			{
-				$pending_option_types = $this->option_types_pending_registration;
-
-				// clear this property, so register_option_type() will not add option types to pending anymore
-				$this->option_types_pending_registration = false;
-
-				foreach ( $pending_option_types as $option_type_class ) {
-					$this->register_option_type( $option_type_class );
-				}
-
-				unset( $pending_option_types );
-			}
+	public function option_type( $type ) {
+		static $did_options_init = false;
+		if ( ! $did_options_init ) {
+			$did_options_init = true;
+			do_action( 'fw_option_types_init' );
 		}
 
-		if ( isset( $this->option_types[ $option_type ] ) ) {
-			return $this->option_types[ $option_type ];
+		if ( isset( $this->option_types[ $type ] ) ) {
+			if (is_string($this->option_types[$type])) {
+				$this->option_types[$type] = $this->get_instance($this->option_types[$type]);
+				$this->option_types[$type]->_call_init($this->get_access_key());
+			}
+
+			return $this->option_types[$type];
 		} else {
-			if ( is_admin() ) {
+			if ( is_admin() && apply_filters('fw_backend_undefined_option_type_warn_user', true, $type) ) {
 				FW_Flash_Messages::add(
-					'fw-get-option-type-undefined-' . $option_type,
-					sprintf( __( 'Undefined option type: %s', 'fw' ), $option_type ),
+					'fw-get-option-type-undefined-' . $type,
+					sprintf( __( 'Undefined option type: %s', 'fw' ), $type ),
 					'warning'
 				);
 			}
 
-			if (!$this->undefined_option_type) {
-				require_once fw_get_framework_directory('/includes/option-types/class-fw-option-type-undefined.php');
-
+			if ( ! $this->undefined_option_type ) {
 				$this->undefined_option_type = new FW_Option_Type_Undefined();
 			}
 
@@ -1795,45 +1780,57 @@ final class _FW_Component_Backend {
 	}
 
 	/**
-	 * @param string $container_type
+	 * Return an array with all option types names
 	 *
-	 * @return FW_Container_Type|FW_Container_Type_Undefined
+	 * @return array
+	 *
+	 * @since 2.6.11
 	 */
-	public function container_type( $container_type ) {
-		if ( is_array( $this->container_types_pending_registration ) ) {
-			// This method is called first time
+	public function get_option_types() {
+		$this->option_type('text'); // trigger init
+		return array_keys( $this->option_types );
+	}
 
-			do_action('fw_container_types_init');
+	/**
+	 * Return an array with all container types names
+	 *
+	 * @return array
+	 *
+	 * @since 2.6.11
+	 */
+	public function get_container_types() {
+		$this->container_type('box'); // trigger init
+		return array_keys( $this->container_types );
+	}
 
-			// Register pending container types
-			{
-				$pending_container_types = $this->container_types_pending_registration;
-
-				// clear this property, so register_container_type() will not add container types to pending anymore
-				$this->container_types_pending_registration = false;
-
-				foreach ( $pending_container_types as $container_type_class ) {
-					$this->register_container_type( $container_type_class );
-				}
-
-				unset( $pending_container_types );
-			}
+	/**
+	 * @param string $type
+	 * @return FW_Container_Type
+	 */
+	public function container_type( $type ) {
+		static $did_containers_init = false;
+		if ( ! $did_containers_init ) {
+			$did_containers_init = true;
+			do_action( 'fw_container_types_init' );
 		}
 
-		if ( isset( $this->container_types[ $container_type ] ) ) {
-			return $this->container_types[ $container_type ];
+		if ( isset( $this->container_types[ $type ] ) ) {
+			if ( is_string( $this->container_types[ $type ] ) ) {
+				$this->container_types[ $type ] = $this->get_instance( $this->container_types[$type] );
+				$this->container_types[ $type ]->_call_init( $this->get_access_key() );
+			}
+
+			return $this->container_types[ $type ];
 		} else {
 			if ( is_admin() ) {
 				FW_Flash_Messages::add(
-					'fw-get-container-type-undefined-' . $container_type,
-					sprintf( __( 'Undefined container type: %s', 'fw' ), $container_type ),
+					'fw-get-container-type-undefined-' . $type,
+					sprintf( __( 'Undefined container type: %s', 'fw' ), $type ),
 					'warning'
 				);
 			}
 
-			if (!$this->undefined_container_type) {
-				require_once fw_get_framework_directory('/includes/container-types/class-fw-container-type-undefined.php');
-
+			if ( ! $this->undefined_container_type ) {
 				$this->undefined_container_type = new FW_Container_Type_Undefined();
 			}
 
@@ -1871,9 +1868,9 @@ final class _FW_Component_Backend {
 			 * not existing container types will throw notices.
 			 * To prevent that, extract and send it only options (without containers)
 			 */
-			fw_collect_options($options_for_enqueue, $customizer_options);
-
-			fw()->backend->enqueue_options_static($options_for_enqueue);
+			fw_collect_options($options_for_enqueue, $customizer_options, array(
+				'callback' => array(__CLASS__, '_callback_fw_collect_options_enqueue_static'),
+			));
 
 			unset($options_for_enqueue, $customizer_options);
 		}
@@ -1881,7 +1878,7 @@ final class _FW_Component_Backend {
 		wp_enqueue_script(
 			'fw-backend-customizer',
 			fw_get_framework_directory_uri( '/static/js/backend-customizer.js' ),
-			array( 'jquery', 'fw-events', 'backbone' ),
+			array( 'jquery', 'fw-events', 'backbone', 'fw-backend-options' ),
 			fw()->manifest->get_version(),
 			true
 		);
@@ -1949,6 +1946,10 @@ final class _FW_Component_Backend {
 							: $opt['option']['desc'],
 					);
 
+					if (isset($opt['option']['wp-customizer-args']) && is_array($opt['option']['wp-customizer-args'])) {
+						$args = array_merge($opt['option']['wp-customizer-args'], $args);
+					}
+
 					if ($has_containers) {
 						if ($parent_data) {
 							trigger_error($opt['id'] .' panel can\'t have a parent ('. $parent_data['id'] .')', E_USER_WARNING);
@@ -1982,10 +1983,10 @@ final class _FW_Component_Backend {
 					unset($children_data);
 					break;
 				case 'option':
-					$setting_id = FW_Option_Type::get_default_name_prefix() .'['. $opt['id'] .']';
+					$setting_id = $this->get_options_name_attr_prefix() .'['. $opt['id'] .']';
 
 					{
-						$args = array(
+						$args_control = array(
 							'label' => empty($opt['option']['label'])
 								? fw_id_to_title($opt['id'])
 								: $opt['option']['label'],
@@ -1995,16 +1996,21 @@ final class _FW_Component_Backend {
 							'settings' => $setting_id,
 						);
 
+						if (isset($opt['option']['wp-customizer-args']) && is_array($opt['option']['wp-customizer-args'])) {
+							$args_control = array_merge($opt['option']['wp-customizer-args'], $args_control);
+						}
+
 						if ($parent_data) {
 							if ($parent_data['customizer_type'] === 'section') {
-								$args['section'] = $parent_data['id'];
+								$args_control['section'] = $parent_data['id'];
 							} else {
 								trigger_error('Invalid control parent: '. $parent_data['customizer_type'], E_USER_WARNING);
 								break;
 							}
 						} else { // the option is not placed in a section, create a section automatically
-							$args['section'] = 'fw_option_auto_section_'. $opt['id'];
-							$wp_customize->add_section($args['section'], array(
+							$args_control['section'] = 'fw_option_auto_section_'. $opt['id'];
+
+							$wp_customize->add_section($args_control['section'], array(
 								'title' => empty($opt['option']['label'])
 									? fw_id_to_title($opt['id'])
 									: $opt['option']['label'],
@@ -2012,30 +2018,34 @@ final class _FW_Component_Backend {
 						}
 					}
 
-					if (!class_exists('_FW_Customizer_Setting_Option')) {
-						require_once fw_get_framework_directory('/includes/customizer/class--fw-customizer-setting-option.php');
-					}
+					{
+						$args_setting = array(
+							'default' => fw()->backend->option_type($opt['option']['type'])->get_value_from_input($opt['option'], null),
+							'fw_option' => $opt['option'],
+							'fw_option_id' => $opt['id'],
+						);
 
-					if (!class_exists('_FW_Customizer_Control_Option_Wrapper')) {
-						require_once fw_get_framework_directory('/includes/customizer/class--fw-customizer-control-option-wrapper.php');
-					}
+						if (isset($opt['option']['wp-customizer-setting-args']) && is_array($opt['option']['wp-customizer-setting-args'])) {
+							$args_setting = array_merge($opt['option']['wp-customizer-setting-args'], $args_setting);
+						}
 
-					$wp_customize->add_setting(
-						new _FW_Customizer_Setting_Option(
-							$wp_customize,
-							$setting_id,
-							array(
-								'default' => fw()->backend->option_type($opt['option']['type'])->get_value_from_input($opt['option'], null),
-								'fw_option' => $opt['option'],
+						$wp_customize->add_setting(
+							new _FW_Customizer_Setting_Option(
+								$wp_customize,
+								$setting_id,
+								$args_setting
 							)
-						)
-					);
+						);
 
+						unset($args_setting);
+					}
+
+					// control must be registered after setting
 					$wp_customize->add_control(
 						new _FW_Customizer_Control_Option_Wrapper(
 							$wp_customize,
 							$opt['id'],
-							$args
+							$args_control
 						)
 					);
 					break;
@@ -2060,5 +2070,25 @@ final class _FW_Component_Backend {
 		} else {
 			$this->default_render_design = $design;
 		}
+	}
+
+	/**
+	 * Get markdown parser with autoloading and caching
+	 *
+	 * Usage:
+	 *   fw()->backend->get_markdown_parser()
+	 *
+	 * @param bool $fresh_instance Whether to force return a fresh instance of the class
+	 *
+	 * @return Parsedown
+	 *
+	 * @since 2.6.9
+	 */
+	public function get_markdown_parser($fresh_instance = false) {
+		if (! $this->markdown_parser || $fresh_instance) {
+			$this->markdown_parser = new Parsedown();
+		}
+
+		return $this->markdown_parser;
 	}
 }

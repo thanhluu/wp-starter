@@ -4,28 +4,14 @@
 
 var fwBackendOptions = {
 	/**
-	 * Open a tab or sub-tab
+	 * @deprecated Tabs are lazy loaded https://github.com/ThemeFuse/Unyson/issues/1174
 	 */
-	openTab: function(tabId) {
-		if (!tabId) {
-			return;
-		}
-
-		var $tabLink = jQuery(".fw-options-tabs-wrapper > .fw-options-tabs-list > ul > li > a[href=\'#"+ tabId +"\']");
-
-		while ($tabLink.length) {
-			$tabLink.trigger("click");
-			$tabLink = $tabLink
-				.closest(".fw-options-tabs-wrapper").parent().closest(".fw-options-tabs-wrapper")
-				.find("> .fw-options-tabs-list > ul > li > a[href=\'#"+ $tabLink.closest(".fw-options-tab").attr("id") +"\']");
-		}
-
-		// click again on focus tab to update the input value
-		jQuery(".fw-options-tabs-wrapper > .fw-options-tabs-list > ul > li > a[href=\'#"+ tabId +"\']").trigger("click");;
-	}
+	openTab: function(tabId) { console.warn('deprecated'); }
 };
 
 jQuery(document).ready(function($){
+	var localized = _fw_backend_options_localized;
+
 	/**
 	 * Functions
 	 */
@@ -47,7 +33,12 @@ jQuery(document).ready(function($){
 				.on('click'+ eventNamespace, '> .hndle, > .handlediv', function(e){
 					var $box = $(this).closest('.fw-postbox');
 
-					$box.toggleClass('closed');
+					if ($box.parent().is('.fw-backend-postboxes') && !$box.siblings().length) {
+						// Do not close if only one box https://github.com/ThemeFuse/Unyson/issues/1094
+						$box.removeClass('closed');
+					} else {
+						$box.toggleClass('closed');
+					}
 
 					var isClosed = $box.hasClass('closed');
 
@@ -69,13 +60,90 @@ jQuery(document).ready(function($){
 	}
 
 	/** Init tabs */
-	fwEvents.on('fw:options:init', function (data) {
-		var $elements = data.$elements.find('.fw-options-tabs-wrapper:not(.initialized)');
+	(function(){
+		var htmlAttrName = 'data-fw-tab-html',
+			initTab = function($tab) {
+				var html;
 
-		if ($elements.length) {
-			$elements.tabs();
+				if (html = $tab.attr(htmlAttrName)) {
+					fwEvents.trigger('fw:options:init', {
+						$elements: $tab.removeAttr(htmlAttrName).html(html),
+						/**
+						 * Sometimes we want to perform some action just when
+						 * lazy tabs are rendered. It's important in those cases
+						 * to distinguish regular fw:options:init events from
+						 * the ones that will render tabs. Passing by this little
+						 * detail may break some widgets because fw:options:init
+						 * event may be fired even when tabs are not yet rendered.
+						 *
+						 * That's how you can be sure that you'll run a piece
+						 * of code just when tabs will be arround 100%.
+						 *
+						 * fwEvents.on('fw:options:init', function (data) {
+						 *   if (! data.lazyTabsUpdated) {
+						 *     return;
+						 *   }
+						 *
+						 *   // Do your business
+						 * });
+						 *
+						 */
+						lazyTabsUpdated: true
+					});
+				}
+			},
+			initAllTabs = function ($el) {
+				var selector = '.fw-options-tab[' + htmlAttrName + ']', $tabs;
 
-			$elements.each(function(){
+				// fixes https://github.com/ThemeFuse/Unyson/issues/1634
+				$el.each(function(){
+					if ($(this).is(selector)) {
+						initTab($(this));
+					}
+				});
+
+				// initialized tabs can contain tabs, so init recursive until nothing is found
+				while (($tabs = $el.find(selector)).length) {
+					$tabs.each(function(){ initTab($(this)); });
+				}
+			};
+
+		fwEvents.on('fw:options:init:tabs', function (data) {
+			initAllTabs(data.$elements);
+		});
+
+		fwEvents.on('fw:options:init', function (data) {
+			var $tabs = data.$elements.find('.fw-options-tabs-wrapper:not(.initialized)');
+
+			if (localized.lazy_tabs) {
+				$tabs.tabs({
+					create: function (event, ui) {
+						initTab(ui.panel);
+					},
+					activate: function (event, ui) {
+						initTab(ui.newPanel);
+						ui.newPanel.closest('.fw-options-tabs-contents')[0].scrollTop = 0
+					}
+				});
+
+				$tabs
+					.closest('form')
+					.off('submit.fw-tabs')
+					.on('submit.fw-tabs', function () {
+						if (!$(this).hasClass('prevent-all-tabs-init')) {
+							// All options needs to be present in html to be sent in POST on submit
+							initAllTabs($(this));
+						}
+					});
+			} else {
+				$tabs.tabs({
+					activate: function (event, ui) {
+						ui.newPanel.closest('.fw-options-tabs-contents')[0].scrollTop = 0
+					}
+				});
+			}
+
+			$tabs.each(function () {
 				var $this = $(this);
 
 				if (!$this.parent().closest('.fw-options-tabs-wrapper').length) {
@@ -84,9 +152,9 @@ jQuery(document).ready(function($){
 				}
 			});
 
-			$elements.addClass('initialized');
-		}
-	});
+			$tabs.addClass('initialized');
+		});
+	})();
 
 	/** Init boxes */
 	fwEvents.on('fw:options:init', function (data) {

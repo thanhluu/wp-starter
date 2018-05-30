@@ -10,21 +10,21 @@ function fw_option_type_date_picker_initialize(object) {
 		format: "dd-mm-yyyy",
 		weekStart: 1,
 		startDate: new Date(),
-		endDate: null
+		endDate: null,
+		language: jQuery('html').attr('lang').split('-').shift()
 	};
 	var options = JSON.parse(object.attr('data-fw-option-date-picker-opts'));
 
 	var date = null;
 
 	if (options.minDate != null || options.minDate != undefined) {
-		console.log( options.minDate );
-		date = options.minDate.split('-');
-		defaults.startDate = new Date(date[2], date[1], date[0]);
+		date = options.minDate.split('-').map(Number);
+		defaults.startDate = new Date(date[2], date[1] - 1, date[0]);
 	}
 
 	if (options.maxDate != null || options.maxDate != undefined) {
-		date = options.maxDate.split('-');
-		defaults.endDate = new Date(date[2], date[1], date[0]);
+		date = options.maxDate.split('-').map(Number);
+		defaults.endDate = new Date(date[2], date[1] - 1, date[0]);
 	}
 
 	if (options.weekStart != null || options.weekStart != undefined) {

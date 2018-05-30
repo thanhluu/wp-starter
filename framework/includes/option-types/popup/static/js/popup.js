@@ -18,7 +18,15 @@
 					size : data.size
 				}),
 				editItem: function (item, values) {
-					item.find('input').val( JSON.stringify( values ) );
+					var $input = item.find('input'),
+						val = $input.val();
+
+					$input.val( values = JSON.stringify( values ) );
+
+					if (val != values) {
+						$this.trigger('fw:option-type:popup:change');
+						$input.trigger('change');
+					}
 				}
 			};
 
@@ -39,13 +47,49 @@
 			utils.modal.open();
 		});
 
-		utils.modal.on('change:values', function (modal, values) {
-			utils.editItem(utils.modal.get('itemRef'), values);
+		utils.modal.on({
+			'change:values': function (modal, values) {
+				utils.editItem(utils.modal.get('itemRef'), values);
 
-			fwEvents.trigger('fw:option-type:popup:change', {
-				element: $this,
-				values: values
-			});
+                fw.options.trigger.changeForEl(utils.modal.get('itemRef'), {
+					value: values
+				});
+
+				fwEvents.trigger('fw:option-type:popup:change', {
+					element: $this,
+					values: values
+				});
+			},
+			'open': function () {
+				$this.trigger('fw:option-type:popup:open');
+
+				if (data['custom-events']['open']) {
+					fwEvents.trigger('fw:option-type:popup:custom:' + data['custom-events']['open'], {
+						element: $this,
+						modal: utils.modal
+					});
+				}
+			},
+			'close': function () {
+				$this.trigger('fw:option-type:popup:close');
+
+				if (data['custom-events']['close']) {
+					fwEvents.trigger('fw:option-type:popup:custom:' + data['custom-events']['close'], {
+						element: $this,
+						modal: utils.modal
+					});
+				}
+			},
+			'render': function () {
+				$this.trigger('fw:option-type:popup:render');
+
+				if (data['custom-events']['render']) {
+					fwEvents.trigger('fw:option-type:popup:custom:' + data['custom-events']['render'], {
+						element: $this,
+						modal: utils.modal
+					});
+				}
+			}
 		});
 	};
 
@@ -53,5 +97,18 @@
 		data.$elements
 			.find('.fw-option-type-popup:not(.fw-option-initialized)').each(popup)
 			.addClass('fw-option-initialized');
+	});
+
+	fw.options.register('popup', {
+		startListeningForChanges: $.noop,
+		getValue: function (optionDescriptor) {
+			return {
+				value: JSON.parse(
+					$(optionDescriptor.el).find('[type="hidden"]').val() || '""'
+				),
+
+				optionDescriptor: optionDescriptor
+			}
+		}
 	});
 })(jQuery, _, fwEvents, window);

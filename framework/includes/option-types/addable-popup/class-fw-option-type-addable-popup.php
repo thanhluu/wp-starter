@@ -2,9 +2,18 @@
 
 class FW_Option_Type_Addable_Popup extends FW_Option_Type
 {
+	public function get_type()
+	{
+		return 'addable-popup';
+	}
+
 	public function _get_backend_width_type()
 	{
 		return 'fixed';
+	}
+
+	protected function _get_data_for_js($id, $option, $data = array()) {
+		return false;
 	}
 
 	/**
@@ -13,20 +22,32 @@ class FW_Option_Type_Addable_Popup extends FW_Option_Type
 	 */
 	protected function _enqueue_static($id, $option, $data)
 	{
-		wp_enqueue_style(
-			'fw-option-' . $this->get_type(),
-			fw_get_framework_directory_uri('/includes/option-types/' . $this->get_type() . '/static/css/styles.css'),
-			array('fw'),
-			fw()->manifest->get_version()
-		);
+		static $enqueue = true;
 
-		wp_enqueue_script(
-			'fw-option-' . $this->get_type(),
-			fw_get_framework_directory_uri('/includes/option-types/' . $this->get_type() . '/static/js/' . $this->get_type() . '.js'),
-			array('underscore', 'fw-events', 'jquery-ui-sortable', 'fw'),
-			fw()->manifest->get_version(),
-			true
-		);
+		/**
+		 * Use hardcoded type because this class is extended and type is changed, but the paths must be the same
+		 * Fixes https://github.com/ThemeFuse/Unyson/issues/1769#issuecomment-247054955
+		 */
+		$option_type = 'addable-popup';
+
+		if ($enqueue) {
+			wp_enqueue_style(
+				'fw-option-' . $option_type,
+				fw_get_framework_directory_uri('/includes/option-types/' . $option_type . '/static/css/styles.css'),
+				array('fw'),
+				fw()->manifest->get_version()
+			);
+
+			wp_enqueue_script(
+				'fw-option-' . $option_type,
+				fw_get_framework_directory_uri('/includes/option-types/' . $option_type . '/static/js/scripts.js'),
+				array('underscore', 'fw-events', 'jquery-ui-sortable', 'fw'),
+				fw()->manifest->get_version(),
+				true
+			);
+
+			$enqueue = false;
+		}
 
 		fw()->backend->enqueue_options_static($option['popup-options']);
 
@@ -45,18 +66,26 @@ class FW_Option_Type_Addable_Popup extends FW_Option_Type
 	{
 		unset($option['attr']['name'], $option['attr']['value']);
 
-		$option['attr']['data-for-js'] = json_encode(array(
-			'title' => empty($option['popup-title']) ? $option['label'] : $option['popup-title'],
-			'options' => $this->transform_options($option['popup-options']),
-			'template' => $option['template'],
-			'size' => $option['size'],
-			'limit' => $option['limit']
+		$option['attr']['data-for-js'] =
+			/**
+			 * Prevent js error when the generated html is used in another option type js template with {{...}}
+			 * Do this trick because {{ is not escaped/encoded by fw_htmlspecialchars()
+			 * Fixes https://github.com/ThemeFuse/Unyson/issues/1877
+			 */
+			json_encode(explode('{{',
+			json_encode(array(
+				'title' => empty($option['popup-title']) ? $option['label'] : $option['popup-title'],
+				'options' => $this->transform_options($option['popup-options']),
+				'template' => $option['template'],
+				'size' => $option['size'],
+				'limit' => $option['limit']
+			))
 		));
 
 		$sortable_image = fw_get_framework_directory_uri('/static/img/sort-vertically.png');
 
 		return fw_render_view(
-			fw_get_framework_directory('/includes/option-types/' . $this->get_type() . '/views/view.php'),
+			fw_get_framework_directory('/includes/option-types/addable-popup/view.php'),
 			compact('id', 'option', 'data', 'sortable_image')
 		);
 	}
@@ -68,6 +97,7 @@ class FW_Option_Type_Addable_Popup extends FW_Option_Type
 	private function transform_options($options)
 	{
 		$new_options = array();
+
 		foreach ($options as $id => $option) {
 			if (is_int($id)) {
 				/**
@@ -83,16 +113,8 @@ class FW_Option_Type_Addable_Popup extends FW_Option_Type
 				$new_options[] = array($id => $option);
 			}
 		}
-		return $new_options;
-	}
 
-	/**
-	 * Option's unique type, used in option array in 'type' key
-	 * @return string
-	 */
-	public function get_type()
-	{
-		return 'addable-popup';
+		return $new_options;
 	}
 
 	/**
@@ -105,24 +127,36 @@ class FW_Option_Type_Addable_Popup extends FW_Option_Type
 	 */
 	protected function _get_value_from_input($option, $input_value)
 	{
-		if (is_array($input_value)) {
-			$option['limit'] = intval($option['limit']);
+		if (is_null($input_value)) {
+			$values = $option['value'];
+		} elseif (is_array($input_value)) {
+			$values = array();
 
-			$values = array_map('json_decode', $input_value, array_fill(0, count($input_value), true));
+			foreach ($input_value as $elem){
+				/**
+				 * Do JSON deconding only if $elem is not already parsed.
+				 * json_decode will throw an error when passing him anything
+				 * but a string.
+				 */
+				if (is_array($elem)) {
+					$values[] = $elem;
+				} else {
+					$values[] = json_decode($elem, true);
+				}
+			}
 
-			if ($option['limit']) {
-				$values= array_slice($values, 0 , $option['limit']);
+			if ( $option['limit'] = intval( $option['limit'] ) ) {
+				$values = array_slice( $values, 0, $option['limit'] );
 			}
 		} else {
-			$values = $option['value'];
+			$values = array();
 		}
 
 		/**
-		 * For e.g. option type 'unique' needs to execute _get_value_from_input() for each option to prevent duplicate values
+		 * For e.g. option type 'unique' needs to execute _get_value_from_input() for each option
+		 * to prevent duplicate values
 		 */
-		$values = apply_filters('fw:option-type:addable-popup:value-from-input', $values, $option);
-
-		return $values;
+		return apply_filters('fw:option-type:addable-popup:value-from-input', $values, $option);
 	}
 
 	/**
@@ -163,4 +197,23 @@ class FW_Option_Type_Addable_Popup extends FW_Option_Type
 
 }
 
-FW_Option_Type::register('FW_Option_Type_Addable_Popup');
+class FW_Option_Type_Addable_Popup_Full extends FW_Option_Type_Addable_Popup
+{
+	public function get_type()
+	{
+		return 'addable-popup-full';
+	}
+
+	public function _get_backend_width_type()
+	{
+		return 'full';
+	}
+
+	protected function _render($id, $option, $data)
+	{
+		// Use styles and scripts from parent option
+		$option['attr']['class'] .= ' fw-option-type-addable-popup';
+
+		return parent::_render($id, $option, $data);
+	}
+}

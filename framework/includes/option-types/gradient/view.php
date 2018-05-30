@@ -15,7 +15,7 @@
 	);
 }
 
-$color_regex = '/^#[a-f0-9]{6}$/i';
+$color_regex = '/^#([a-f0-9]{3}){1,2}$/i';
 
 ?>
 <div <?php echo fw_attr_to_html($div_attr) ?> >
@@ -42,7 +42,7 @@ $color_regex = '/^#[a-f0-9]{6}$/i';
 		);
 		?>
 	</div>
-	<?php if ( ! empty( $option['value']['secondary'] ) ): ?>
+	<?php if ( isset( $option['value']['secondary'] ) ): ?>
 		<div class="delimiter"><?php echo __( 'to', 'fw' ) ?></div>
 		<div class="secondary-color">
 			<?php
