@@ -1,6 +1,6 @@
 # WordPress Starter Theme
 
-[![Travis CI Build Status](https://travis-ci.org/thanhluu/wp-theme-setup.svg?branch=master)](https://travis-ci.org/thanhluu/wp-theme-setup) [![devDependency Status](https://david-dm.org/thanhluu/wp-theme-setup/dev-status.svg)](https://david-dm.org/thanhluu/wp-theme-setup#info=devDependencies)
+[![Travis CI Build Status](https://travis-ci.org/thanhluu/wp-starter.svg?branch=master)](https://travis-ci.org/thanhluu/wp-starter) [![devDependency Status](https://david-dm.org/thanhluu/wp-starter/dev-status.svg)](https://david-dm.org/thanhluu/wp-starter#info=devDependencies)
 
 Whenever I start developing a new project, it really takes me quite a lot of time to set up neccessary tools. In this repo, I would like to share the great tools which I have been using to build the WordPress themes. Plus, they were also standardized so that I totally develop the WordPress themes with high quality.
 
