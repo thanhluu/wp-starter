@@ -2,6 +2,7 @@
 
 var gulp = require('gulp');
 var sass = require('gulp-sass');
+var clean = require("gulp-clean");
 var cssnano = require('gulp-cssnano');
 var rename = require("gulp-rename");
 var sourcemaps = require("gulp-sourcemaps");
@@ -30,11 +31,6 @@ var filesRename = [
   {
     cwd: '../assets/css/wp-starter.css',
     name: `${pkg.name}.css`,
-    dest: '../assets/css/'
-  },
-  {
-    cwd: '../assets/css/wp-starter.css.map',
-    name: `${pkg.name}.css.map`,
     dest: '../assets/css/'
   },
   {
@@ -96,16 +92,16 @@ gulp.task('minify', function() {
     .pipe(gulp.dest('../assets/css'));
 });
 
-gulp.task('rename', function() {
+gulp.task('rename', async (done) => {
   for (let i in filesRename) {
-    gulp.src(filesRename[i].cwd)
-      .pipe(clean({force: true}))
+		gulp.src(filesRename[i].cwd, {allowEmpty: true})
+			.pipe(clean({force: true}))
       .pipe(rename(filesRename[i].name))
       .pipe(gulp.dest(filesRename[i].dest));
   }
 });
 
-gulp.task('replace', function() {
+gulp.task('replace', async (done) => {
   gulp.src(['../*.php', '../**/*.php'])
     .pipe(replace(/wp_starter/g, pkg.theme_prefix))
     .pipe(replace(/wp-starter/g, pkg.name))
