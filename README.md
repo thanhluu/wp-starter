@@ -7,24 +7,7 @@ Whenever I start developing a new project, it really takes me quite a lot of tim
 ## List of tools
 
 * [Bower](http://bower.io/) for front-end package management
-* [Grunt](http://gruntjs.com/) for running automation JavaScript tasks
-	- [load-grunt-tasks](https://github.com/sindresorhus/load-grunt-tasks) for load multiple grunt tasks using globbing patterns
-    - [time-grunt](https://github.com/sindresorhus/time-grunt) for display the elapsed execution time of grunt tasks
-
-	- [grunt-contrib-less](https://github.com/gruntjs/grunt-contrib-less) for compile LESS files to CSS
-	- [grunt-autoprefixer](https://github.com/nDmitry/grunt-autoprefixer) for parses CSS and adds vendor-prefixed CSS properties using the [Can I Use](http://caniuse.com/) database.
-	- [grunt-contrib-cssmin](https://github.com/gruntjs/grunt-contrib-cssmin) for minify CSS
-
-	- [grunt-contrib-concat](https://github.com/gruntjs/grunt-contrib-concat) for concatenate files
-	- [grunt-contrib-uglify](https://github.com/gruntjs/grunt-contrib-uglify) for minify files with UglifyJS
-	- [grunt-contrib-jshint](https://github.com/gruntjs/grunt-contrib-jshint) for validate files with JSHint
-
-    - [grunt-contrib-watch](https://github.com/gruntjs/grunt-contrib-watch) for run tasks whenever watched files change
-    - [grunt-modernizr](https://github.com/Modernizr/grunt-modernizr) for build out a lean, mean Modernizr machine.
-
-    - [grunt-contrib-compress](https://github.com/gruntjs/grunt-contrib-compress) for compress files and folders
-	- [grunt-contrib-copy](https://github.com/gruntjs/grunt-contrib-copy) for copy files and folders
-
+* [gulp.js](http://gruntjs.com/) for running automation JavaScript tasks
 * [Travis CI](http://travis-ci.org) for automatically testing PHP codes, using [PHP_CodeSniffer](https://github.com/squizlabs/PHP_CodeSniffer) and [WordPress-Coding-Standard](https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards)
 * [Gitignore](http://www.gitignore.io/) for determine which files and directories to ignore, before you make a commit
 * [Editor Config](http://editorconfig.org/) for configuring the editor according to the same [standard](http://make.wordpress.org/core/handbook/coding-standards/php/#indentation)
@@ -35,7 +18,7 @@ Your Computer must setup those tools before start develop this theme:
 
 1. [Node.js](http://nodejs.org/download/)
 2. [Git CMD](http://git-scm.com/) (For Windows, you must install Git Bash)
-3. Grunt-CLI: Open CMD (on Windows) or Termnial (Mac and Linux) type `npm install -g grunt-cli`
+3. Gulp-CLI: Open CMD (on Windows) or Termnial (Mac and Linux) type `npm install -g gulp-cli`
 4. [Sublime Text](http://www.sublimetext.com/)
 5. [Sublime Package Control](https://sublime.wbond.net/)
 5. [Editor Config Sublime](https://github.com/sindresorhus/editorconfig-sublime) (You can install via Sublime Package Control)
@@ -45,19 +28,19 @@ Your Computer must setup those tools before start develop this theme:
 From the command line, navigate to the theme directory
 
 1. Navigate to `<theme-folder>/tools/`
-2. Run `npm install` to install Node modules
+2. Run `yarn install` to install Node modules
 3. Run `bower install` to install front-end packages
 4. Config your project on `tools/package.json`
-5. Run `grunt generate` to generate your WordPress theme
+5. Run `gulp generate` to generate your WordPress theme
 
 ## Available Grunt Commands
 
 When completed, you'll be able to run the various Grunt commands provided from the command line:
 
-* `grunt watch` — Compile assets when file changes are made
-* `grunt dev`
-* `grunt build`
-* `grunt generate` — Generate theme
+* `gulp generate` — Generate a new theme
+* `gulp watch` — Compile assets when file changes are made
+* `gulp build` — Build for production
+
 
 ## Running Travis CI
 

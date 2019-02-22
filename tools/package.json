@@ -1,56 +1,30 @@
 {
-  "name": "wp-starter",
-  "description" : "WordPress Starter Theme",
+	"name": "wp-starter",
+	"description": "WordPress Starter Theme",
   "version": "1.0.0",
-
-  "theme_name": "WP Starter",
-  "theme_prefix": "wp_starter",
-  "theme_class_prefix": "WP_Starter",
-
-  "prefix": {
-    "theme_name": "WP Starter",
-    "theme_prefix": "wp_starter",
-    "theme_class_prefix": "WP_Starter",
-    "name": "wp-starer"
-  },
-
-  "author": "Author <contact@example.com>",
-  "author_name": "Author",
-  "homepage": "http://www.example.com",
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/thanhluu/wp-starter.git"
+	},
+	"theme_name": "WP Starter",
+	"theme_prefix": "wp_starter",
   "theme_url": "http://www.example.com/wp-starter/",
-  "repository": {
-    "type": "git",
-    "url": "git://github.com/thanhluu/wp-starter.git"
-  },
-  "bugs": {
-    "url": "https://github.com/thanhluu/wp-starter/issues"
-  },
-  "license": "GPL-3.0",
-  "readme": [
-    {
-      "url": "readme.md"
-    }
-  ],
-  "engines": {
-    "node": ">= 8.0.0"
-  },
-  "devDependencies": {
-    "gulp": "^4.0.0",
-    "gulp-autoprefixer": "^5.0.0",
-    "gulp-clean": "^0.4.0",
-    "gulp-cli": "^2.0.1",
-    "gulp-concat": "^2.6.1",
-    "gulp-cssnano": "^2.1.3",
-    "gulp-jshint": "^2.1.0",
-    "gulp-livereload": "^3.8.1",
-    "gulp-rename": "^1.2.3",
-    "gulp-replace": "^1.0.0",
-    "gulp-replace-task": "^0.11.0",
-    "gulp-sass": "^4.0.1",
-    "gulp-sourcemaps": "^2.6.4",
-    "gulp-uglify": "^3.0.0",
-    "gulp-wp-pot": "^2.3.1",
-    "gulp-zip": "^4.1.0",
-    "jshint": "^2.9.5"
-  }
+	"author": "Author <contact@example.com>",
+	"author_name": "Author",
+	"author_homepage": "http://www.example.com",
+	"readme": "https://www.example.com",
+	"license": "GPL-3.0",
+	"devDependencies": {
+		"gulp": "^4.0.0",
+		"gulp-autoprefixer": "^6.0.0",
+		"gulp-concat": "^2.6.1",
+		"gulp-cssnano": "^2.1.3",
+		"gulp-jshint": "^2.1.0",
+		"gulp-rename": "^1.4.0",
+		"gulp-replace": "^1.0.0",
+		"gulp-sass": "^4.0.2",
+		"gulp-sourcemaps": "^2.6.4",
+		"gulp-uglify": "^3.0.1",
+		"jshint": "^2.10.1"
+	}
 }
