@@ -1,9 +1,30 @@
 'use strict';
 
 var gulp = require('gulp');
+var sass = require('gulp-sass');
+var cssnano = require('gulp-cssnano');
+var rename = require("gulp-rename");
+var sourcemaps = require("gulp-sourcemaps");
+var autoprefixer = require("gulp-autoprefixer");
 var replace = require('gulp-replace');
 var fs = require('fs');
 var pkg = JSON.parse(fs.readFileSync('./package.json'));
+
+gulp.task('sass', function () {
+	return gulp.src('../assets/scss/theme.scss')
+		.pipe(sourcemaps.init())
+		.pipe(sass.sync().on('error', sass.logError))
+		.pipe(sourcemaps.write())
+		.pipe(autoprefixer())
+		.pipe(gulp.dest('../assets/css'));
+});
+
+gulp.task('minify', function () {
+	return gulp.src('../assets/css/theme.css')
+		.pipe(cssnano())
+		.pipe(rename('theme.min.css'))
+		.pipe(gulp.dest('../assets/css'));
+});
 
 gulp.task('replace', async (done) => {
 	gulp.src(['../*.php', '../**/*.php'])
@@ -26,3 +47,9 @@ gulp.task('replace', async (done) => {
 });
 
 gulp.task('generate', gulp.series('replace'));
+
+gulp.task('watch', function () {
+	gulp.watch('../assets/scss/*.scss', gulp.series('sass'));
+});
+
+gulp.task('build', gulp.series('sass', 'minify'));
