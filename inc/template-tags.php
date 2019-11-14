@@ -14,25 +14,25 @@ function wp_starter_entry_meta() {
 	);
 
 	$posted_on = sprintf(
-		_x( '<i class="fa fa-calendar"></i> %s', 'post date', 'wp-starter' ),
+		_x( '<i class="fa fa-calendar mr-1 text-muted"></i> %s', 'post date', 'wp-starter' ),
 		'<a href="' . esc_url( get_permalink() ) . '" rel="bookmark">' . $time_string . '</a>'
 	);
 
 	$byline = sprintf(
-		_x( '<i class="fa fa-user"></i> %s', 'post author', 'wp-starter' ),
+		_x( '<i class="fa fa-user mr-1 text-muted"></i> %s', 'post author', 'wp-starter' ),
 		'<span class="author vcard"><a class="url fn n" href="' . esc_url( get_author_posts_url( get_the_author_meta( 'ID' ) ) ) . '">' . esc_html( get_the_author() ) . '</a></span>'
 	);
 
-	echo '<span class="posted-on">' . $posted_on . '</span><span class="byline"> ' . $byline . '</span>';
+	echo '<span class="posted-on">' . $posted_on . '</span><span class="byline ml-3"> ' . $byline . '</span>';
 
 	$categories_list = get_the_category_list( __( ', ', 'wp-starter' ) );
 	if ( $categories_list && wp_starter_categorized_blog() ) {
-		printf( '<span class="cat-links">' . __( '<i class="fa fa-folder"></i> %1$s', 'wp-starter' ) . '</span>', $categories_list );
+		printf( '<span class="cat-links ml-3">' . __( '<i class="fa fa-folder"></i> %1$s', 'wp-starter' ) . '</span>', $categories_list );
 	}
 
 	if ( ! post_password_required() && ( comments_open() || get_comments_number() ) ) {
-		echo '<span class="comments-link">';
-		echo '<i class="fa fa-comments"></i>';
+		echo '<span class="comments-link ml-3">';
+		echo '<i class="fa fa-comments mr-1 text-muted"></i>';
 		comments_popup_link( __( '0 Comments', 'wp-starter' ), __( '1 Comment', 'wp-starter' ), __( '% Comments', 'wp-starter' ) );
 		echo '</span>';
 	}

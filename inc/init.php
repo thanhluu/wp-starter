@@ -13,8 +13,6 @@ function wp_starter_setup() {
 
 	add_theme_support( 'post-thumbnails' );
 
-	add_theme_support( 'woocommerce' );
-
 	register_nav_menus( array(
 		'primary' => __( 'Primary Menu', 'wp-starter' ),
 	) );
@@ -31,51 +29,14 @@ function wp_starter_setup() {
 endif;
 add_action( 'after_setup_theme', 'wp_starter_setup' );
 
-function wp_starter_theme_updater() {
-	require( get_template_directory() . '/inc/updater/theme-updater.php' );
-	if ( is_admin() && isset( $_GET['activated'] ) ) {
-		header( 'Location: '.admin_url().'admin.php?page=fw-extensions');
-	}
-}
-add_action( 'after_setup_theme', 'wp_starter_theme_updater' );
-
-function wp_starter_register_required_plugins() {
-	$plugins = array(
-		array(
-			'name'        => 'Meta Box',
-			'slug'        => 'meta-box'
-		),
-		array(
-			'name'        => 'WordPress Importer',
-			'slug'        => 'wordpress-importer'
-		),
-		array(
-			'name'        => 'Widget Importer & Exporter',
-			'slug'        => 'widget-importer-exporter'
-		),
-		array(
-			'name'        => 'WordPress SEO by Yoast',
-			'slug'        => 'wordpress-seo'
-		)
-	);
-
-	$config = array(
-		'id'           => 'wp-starter',
-		'menu'         => 'wp-starter-install-plugins',
-		'parent-slug'  => 'fw-extensions',
-	);
-	tgmpa( $plugins, $config );
-}
-add_action( 'tgmpa_register', 'wp_starter_register_required_plugins' );
-
 function wp_starter_widgets_init() {
 	register_sidebar( array(
 		'name'          => __( 'Sidebar', 'wp-starter' ),
 		'id'            => 'sidebar-1',
 		'description'   => '',
-		'before_widget' => '<aside id="%1$s" class="widget %2$s">',
+		'before_widget' => '<aside id="%1$s" class="widget %2$s my-4">',
 		'after_widget'  => '</aside>',
-		'before_title'  => '<h3 class="widget-title">',
+		'before_title'  => '<h3 class="widget-title h6">',
 		'after_title'   => '</h3>',
 	) );
 }

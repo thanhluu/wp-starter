@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html <?php language_attributes(); ?>>
+<html class="h-100" <?php language_attributes(); ?>>
 <head>
 <meta charset="<?php bloginfo( 'charset' ); ?>">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,12 +9,12 @@
 <?php wp_head(); ?>
 </head>
 
-<body <?php body_class(); ?>>
-<div id="page" class="hfeed site">
-	<header id="masthead" class="navbar navbar-default navbar-static-top site-header" role="banner">
+<body <?php body_class( 'h-100' ); ?>>
+<div class="hfeed site d-flex flex-column h-100">
+	<header class="site-header navbar navbar-expand-lg navbar-light bg-light">
 		<div class="container">
 			<div class="navbar-header">
-				<a href="<?php echo esc_url( home_url( '/' ) ); ?>" rel="home" class="navbar-brand">
+				<a href="<?php echo esc_url( home_url( '/' ) ); ?>" class="navbar-brand">
 					<?php $site_logo = wp_starter_get_theme_option('site_logo'); ?>
 					<?php if( $site_logo ) : ?>
 						<img src="<?php echo esc_url( $site_logo ); ?>" title="<?php bloginfo('name'); ?>">
@@ -46,4 +46,4 @@
 		</div>
 	</header>
 
-	<div id="container" class="site-container">
+	<div class="site-container">

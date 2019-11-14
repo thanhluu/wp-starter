@@ -1,1 +1,5 @@
-@import "../vendor/bootstrap/scss/bootstrap.scss";
+@import "../../tools/node_modules/bootstrap/scss/bootstrap";
+
+@import "custom_variables";
+
+@import "custom";

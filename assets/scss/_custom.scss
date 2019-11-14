@@ -1,0 +1,15 @@
+html.h-100 {
+	margin-top: 0 !important;
+}
+
+body.admin-bar {
+	padding-top: 32px;
+
+	@media screen and (max-width: 782px) {
+		padding-top: 46px;
+	}
+}
+
+.site-container {
+	flex: 1;
+}

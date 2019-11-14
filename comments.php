@@ -73,9 +73,9 @@ if ( post_password_required() ) {
 			'logged_in_as' => '',
 			'comment_notes_before' => '',
 			'comment_notes_after' => '',
-			'class_submit' => 'btn btn-default',
+			'class_submit' => 'btn btn-primary',
 			'fields' => apply_filters( 'comment_form_default_fields', $fields ),
-	  	'comment_field' => '<p class="comment-form-comment"><label for="comment">' . _x( 'Comment', 'wp-starter' ) . '</label><textarea id="comment" name="comment" class="form-control" rows="5" aria-required="true"></textarea></p>',
+	  	'comment_field' => '<p class="comment-form-comment"><label for="comment" class="sr-only">' . _x( 'Comment', 'wp-starter' ) . '</label><textarea id="comment" name="comment" class="form-control" rows="5" aria-required="true"></textarea></p>',
 		);
 		comment_form( $comments_args );
 	?>
